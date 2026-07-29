@@ -1,1 +1,44 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* ---------------------------------------------------------------- */
+/* Dark mode                                                        */
+/* Most of the app is built on the CSS variables below, so flipping */
+/* them on the .dark class re-themes the whole site in one place.   */
+/* ---------------------------------------------------------------- */
+.dark {
+  --color-paper: 22 26 20; /* dark background */
+  --color-text: 232 232 224; /* light text */
+  --color-soil: 150 150 138; /* lighter, used mostly at low opacity for borders */
+  --color-soil-dark: 235 235 225;
+  --color-paddy-green: 96 168 105; /* brighter green for contrast on dark bg */
+  --color-gold-grain: 224 181 92;
+}
+
+/* A handful of components use literal `bg-white` cards instead of the
+   `bg-paper` token above — patch those so they don't stay bright white
+   in dark mode. */
+.dark .bg-white {
+  background-color: rgb(34 40 30);
+}
+.dark .bg-white\/60 {
+  background-color: rgb(34 40 30 / 0.6);
+}
+.dark .bg-white\/70 {
+  background-color: rgb(34 40 30 / 0.7);
+}
+.dark .bg-white\/80 {
+  background-color: rgb(34 40 30 / 0.8);
+}

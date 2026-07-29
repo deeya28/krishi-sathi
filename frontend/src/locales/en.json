@@ -1,0 +1,131 @@
+{
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "team": "Team",
+    "contact": "Contact",
+    "login": "Login"
+  },
+  "hero": {
+    "eyebrow": "Smart Agriculture Platform . Nepal",
+    "subtitle": "Krishi Sathi connects farmers, experts, and communities across Nepal, helping every harvest start with better knowledge.",
+    "login": "Login",
+    "register": "Register"
+  },
+  "about": {
+    "eyebrow": "About Krishi Sathi",
+    "title": "Technology that walks the fields with you.",
+    "description": "Krishi Sathi is a smart agriculture platform that connects farmers, experts, and communities. Our goal is simple: make farming easier through technology, shared knowledge, and teamwork, right from the field.",
+    "check1": "Easy to Use",
+    "check2": "Community Based",
+    "check3": "Secure Platform",
+    "check4": "Free Registration",
+    "scanning": "Scanning leaf...",
+    "checking": "Checking pattern...",
+    "healthy": "Healthy"
+  },
+  "missionVision": {
+    "missionEyebrow": "01 . Mission",
+    "missionTitle": "Grow knowledge, together.",
+    "missionText": "Help farmers by providing a simple platform to learn, connect, and share agricultural knowledge.",
+    "visionEyebrow": "02 . Vision",
+    "visionTitle": "A trusted digital field.",
+    "visionText": "Build a trusted digital farming community that supports innovation and sustainable agriculture."
+  },
+  "features": {
+    "eyebrow": "Why Choose Us",
+    "title": "Built for how farmers actually work.",
+    "item1Title": "Easy to Use",
+    "item1Text": "A simple interface built for every farmer, regardless of tech experience.",
+    "item2Title": "Community",
+    "item2Text": "Learn together with farmers and experts across Nepal.",
+    "item3Title": "Responsive",
+    "item3Text": "Works smoothly on every device, from the field to the office."
+  },
+  "team": {
+    "eyebrow": "Our Team",
+    "title": "Meet our development team.",
+    "subtitle": "We are a group of students working together to build Krishi Sathi, a platform for smarter agriculture."
+  },
+  "contact": {
+    "eyebrow": "Contact Us",
+    "title": "Let's talk about your field.",
+    "nameLabel": "Name",
+    "emailLabel": "Email",
+    "messageLabel": "Message",
+    "namePlaceholder": "Your full name",
+    "emailPlaceholder": "you@example.com",
+    "messagePlaceholder": "How can we help?",
+    "send": "Send Message",
+    "sending": "Sending...",
+    "sent": "Sent"
+  },
+  "footer": {
+    "tagline": "Smart Agriculture . Community . Innovation",
+    "copyright": "© 2026 Krishi Sathi. All Rights Reserved."
+  },
+  "login": {
+    "eyebrow": "Login",
+    "title": "Good to see you again.",
+    "welcome": "Welcome back to the community keeping Nepal's fields growing.",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "loginBtn": "Log In",
+    "loggingIn": "Logging in..."
+  },
+  "register": {
+    "eyebrow": "Register",
+    "title": "Join the community.",
+    "welcome": "Bring your field online with knowledge, market prices, and community all in one place.",
+    "nameLabel": "Full Name",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "roleLabel": "I am a",
+    "roleFarmer": "Farmer",
+    "roleExpert": "Expert",
+    "roleVendor": "Vendor",
+    "createBtn": "Create Account",
+    "creating": "Creating account..."
+  },
+  "dashboard": {
+    "searchPlaceholder": "Search posts, farmers...",
+    "notifications": "Notifications",
+    "myProfile": "My Profile",
+    "myPosts": "My Posts",
+    "savedPosts": "Saved Posts",
+    "settings": "Settings",
+    "logout": "Logout",
+    "home": "Home",
+    "marketplace": "Marketplace",
+    "expert": "Expert",
+    "createPost": "Create Post",
+    "createPostPlaceholder": "Share something with the community...",
+    "post": "Post",
+    "recentPosts": "Recent Posts",
+    "noPosts": "No posts yet.",
+    "weather": "Weather",
+    "farmingTips": "Farming Tips",
+    "announcements": "Announcements",
+    "tip1": "Water early morning or evening to reduce loss to evaporation.",
+    "tip2": "Rotate crops each season to keep soil nutrients balanced.",
+    "tip3": "Check leaves weekly for early signs of pest damage.",
+    "announcementText": "New expert consultation slots are open for this week. Book early."
+  },
+  "marketplace": {
+    "title": "Marketplace",
+    "all": "All",
+    "seeds": "Seeds",
+    "fertilizer": "Fertilizer",
+    "equipment": "Equipment",
+    "viewItem": "View"
+  },
+  "expert": {
+    "title": "Talk to an Expert",
+    "book": "Book",
+    "selectPrompt": "Choose an expert to book a consultation.",
+    "bookingWith": "Booking With",
+    "paymentMethod": "Payment Method",
+    "confirmBooking": "Confirm & Pay",
+    "bookingConfirmed": "Booking Confirmed"
+  }
+}
