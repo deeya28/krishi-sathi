@@ -6,6 +6,7 @@ const {
   getAllPosts,
   getPostById,
   getMyPosts,
+  updatePost,
   deletePost,
 } = require("../controllers/postController");
 
@@ -31,6 +32,10 @@ router.get("/:id", protect, getPostById);
 
 // NOTE: comment routes (expert-comment, community-comment) moved to
 // commentRoutes.js, mounted separately at /api/comments in server.js
+
+// @route   PUT /api/posts/:id
+// @desc    Farmer edits their own post
+router.put("/:id", protect, authorize("farmer"), updatePost);
 
 // @route   DELETE /api/posts/:id
 // @desc    Farmer deletes their own post
