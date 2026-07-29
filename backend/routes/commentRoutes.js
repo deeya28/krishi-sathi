@@ -1,0 +1,25 @@
+const express = require("express");
+const router = express.Router();
+
+const {
+  addComment,
+  getCommentsByPost,
+  deleteComment,
+} = require("../controllers/commentController");
+
+const { protect } = require("../middleware/authMiddleware");
+const { authorize } = require("../middleware/roleMiddleware");
+
+// @route   POST /api/comments/:postId
+// @desc    Expert or community user adds a comment on a post
+router.post("/:postId", protect, authorize("expert", "community", "farmer"), addComment);
+
+// @route   GET /api/comments/:postId
+// @desc    Get all comments for a post - optional filter ?type=expert|community
+router.get("/:postId", protect, getCommentsByPost);
+
+// @route   DELETE /api/comments/:id
+// @desc    Delete a comment (only by the user who created it)
+router.delete("/:id", protect, deleteComment);
+
+module.exports = router;

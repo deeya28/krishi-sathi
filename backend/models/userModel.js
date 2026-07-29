@@ -1,32 +1,41 @@
 const mongoose = require('mongoose');
 
-// The Schema is the blueprint for our data
+// Define your roles as a frozen object to use as an enum
+const Roles = Object.freeze({
+    ADMIN: 'admin',
+    FARMER: 'farmer',
+    EXPERT: 'agricultural_expert',
+    COMMUNITY: 'community_user'
+});
+
 const userSchema = new mongoose.Schema(
     {
         name: {
             type: String,
-            required: [true, 'Please add a name'], // The array allows us to provide a custom error message
+            required: [true, 'Please add a name'],
         },
         email: {
             type: String,
             required: [true, 'Please add an email'],
-            unique: true, // No two users can have the same email
+            unique: true,
         },
         password: {
             type: String,
             required: [true, 'Please add a password'],
         },
-        isAdmin: {
-            type: Boolean,
+        role: {
+            type: String,
             required: true,
-            default: false, // By default, new users are NOT admins
+            enum: Object.values(Roles), // Restricts values to ['admin', 'farmer', 'agricultural_expert', 'community_user']
+            default: Roles.COMMUNITY,   // Sets default role if none is provided
         },
-    },
-    {
-        // This automatically adds 'createdAt' and 'updatedAt' timestamps to every user document!
+    },    {
         timestamps: true, 
     }
 );
 
-// We export the model so we can use it in our controllers
-module.exports = mongoose.model('User', userSchema);
+// Optional: Export Roles alongside the model for easy use in controllers
+module.exports = {
+    User: mongoose.model('User', userSchema),
+    Roles
+};
