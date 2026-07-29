@@ -118,6 +118,38 @@ exports.getMyPosts = async (req, res) => {
 // live in their own collection - see commentController.js for
 // addComment / getCommentsByPost.
 
+// @desc    Update a post (only by the farmer who created it)
+// @route   PUT /api/posts/:id
+// @access  Private (farmer)
+exports.updatePost = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    if (post.farmer.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to edit this post" });
+    }
+
+    // Only update fields that were actually provided, leave the rest unchanged
+    const { cropName, description, issueType, media, location } = req.body;
+
+    if (cropName !== undefined) post.cropName = cropName;
+    if (description !== undefined) post.description = description;
+    if (issueType !== undefined) post.issueType = issueType;
+    if (media !== undefined) post.media = media;
+    if (location !== undefined) post.location = location;
+
+    await post.save();
+
+    res.status(200).json({ message: "Post updated successfully", post });
+  } catch (error) {
+    res.status(500).json({ message: "Error updating post", error: error.message });
+  }
+};
+
 // @desc    Delete a post (only by the farmer who created it)
 // @route   DELETE /api/posts/:id
 // @access  Private (farmer)
