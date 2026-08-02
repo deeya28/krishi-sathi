@@ -13,10 +13,11 @@ const {
 // TODO: adjust these to match your actual auth middleware names/exports
 const { protect } = require("../middleware/authMiddleware");
 const { authorize } = require("../middleware/roleMiddleware");
+const { upload } = require("../config/cloudinaryConfig");
 
 // @route   POST /api/posts
-// @desc    Farmer creates a new post
-router.post("/", protect, authorize("farmer"), createPost);
+// @desc    Farmer creates a new post (with up to 5 photos/videos)
+router.post("/", protect, authorize("farmer"), upload.array("media", 5), createPost);
 
 // @route   GET /api/posts
 // @desc    Get all posts (feed) - optional query filters: ?status=&issueType=

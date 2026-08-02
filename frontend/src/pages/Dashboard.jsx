@@ -16,11 +16,16 @@ export default function Dashboard() {
     toggleLike,
     sharePost,
     addComment,
+    loadComments,
     toggleSave,
     savedIds,
   } = useData();
 
   const [postText, setPostText] = useState("");
+
+  // File upload states
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
 
   // Edit Post States
   const [editingPostId, setEditingPostId] = useState(null);
@@ -31,12 +36,31 @@ export default function Dashboard() {
   const [activeCommentDrawer, setActiveCommentDrawer] = useState({});
   const [activeMenuId, setActiveMenuId] = useState(null);
 
+  // --- FILE UPLOAD HANDLERS ---
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files).slice(0, 5); // max 5 files
+    setSelectedFiles(files);
+    setPreviews(
+      files.map((file) => ({
+        url: URL.createObjectURL(file),
+        type: file.type.startsWith("video") ? "video" : "image",
+      }))
+    );
+  };
+
+  const removeSelectedFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setPreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
   // --- CREATE POST ---
   const handleCreatePost = (e) => {
     e.preventDefault();
     if (!postText.trim()) return;
-    addPost(postText);
+    addPost(postText, selectedFiles);
     setPostText("");
+    setSelectedFiles([]);
+    setPreviews([]);
   };
 
   // --- DELETE POST ---
@@ -67,7 +91,10 @@ export default function Dashboard() {
 
   // --- COMMENT ACTIONS ---
   const toggleCommentDrawer = (id) => {
+    const isOpening = !activeCommentDrawer[id];
     setActiveCommentDrawer((prev) => ({ ...prev, [id]: !prev[id] }));
+    // Fetch comments from the backend the first time the drawer opens
+    if (isOpening) loadComments(id);
   };
 
   const handleAddComment = (postId) => {
@@ -103,7 +130,44 @@ export default function Dashboard() {
           className="w-full bg-transparent border border-soil/15 rounded-md p-3 text-sm text-ink placeholder:text-ink/40 focus:outline-none focus:border-paddy-green transition-colors resize-none"
           style={{ fontFamily: "'Work Sans', sans-serif" }}
         />
-        <div className="flex justify-end mt-3">
+
+        {/* MEDIA PREVIEW THUMBNAILS */}
+        {previews.length > 0 && (
+          <div className="flex gap-2 flex-wrap mt-3">
+            {previews.map((preview, index) => (
+              <div
+                key={index}
+                className="relative w-20 h-20 rounded-md overflow-hidden border border-soil/15"
+              >
+                {preview.type === "video" ? (
+                  <video src={preview.url} className="w-full h-full object-cover" />
+                ) : (
+                  <img src={preview.url} className="w-full h-full object-cover" alt="" />
+                )}
+                <button
+                  type="button"
+                  onClick={() => removeSelectedFile(index)}
+                  className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white text-xs flex items-center justify-center"
+                >
+                  x
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-between items-center mt-3">
+          <label className="text-xs text-paddy-green font-medium cursor-pointer hover:underline">
+            📷 Add Photos/Videos
+            <input
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </label>
+
           <button
             type="button"
             onClick={handleCreatePost}
@@ -270,12 +334,37 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : (
-                <p
-                  className="text-sm text-ink/85 leading-relaxed mb-4"
-                  style={{ fontFamily: "'Work Sans', sans-serif" }}
-                >
-                  {post.text}
-                </p>
+                <>
+                  <p
+                    className="text-sm text-ink/85 leading-relaxed mb-3"
+                    style={{ fontFamily: "'Work Sans', sans-serif" }}
+                  >
+                    {post.text}
+                  </p>
+
+                  {/* UPLOADED MEDIA DISPLAY */}
+                  {post.media && post.media.length > 0 && (
+                    <div className="flex gap-2 flex-wrap mb-4">
+                      {post.media.map((m, i) =>
+                        m.type === "video" ? (
+                          <video
+                            key={i}
+                            src={m.url}
+                            controls
+                            className="w-full max-w-xs rounded-md"
+                          />
+                        ) : (
+                          <img
+                            key={i}
+                            src={m.url}
+                            className="w-full max-w-xs rounded-md object-cover"
+                            alt=""
+                          />
+                        )
+                      )}
+                    </div>
+                  )}
+                </>
               )}
 
               {/* STATS SUMMARY COUNTER */}

@@ -1,7 +1,7 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const connectDB = require('./config/db');
+const connectDB = require('./Config/db');
 
 dotenv.config();
 connectDB();
@@ -9,7 +9,10 @@ connectDB();
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    credentials: true,
+}));
 app.use(express.json()); // This allows us to read req.body as JSON!
 app.use(express.urlencoded({ extended: false })); // This allows us to read form data
 

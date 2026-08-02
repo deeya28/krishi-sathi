@@ -12,7 +12,7 @@ const { authorize } = require("../middleware/roleMiddleware");
 
 // @route   POST /api/comments/:postId
 // @desc    Expert or community user adds a comment on a post
-router.post("/:postId", protect, authorize("expert", "community", "farmer"), addComment);
+router.post("/:postId", protect, authorize("agricultural_expert", "community_user", "farmer"), addComment);
 
 // @route   GET /api/comments/:postId
 // @desc    Get all comments for a post - optional filter ?type=expert|community

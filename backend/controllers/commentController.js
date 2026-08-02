@@ -22,9 +22,9 @@ exports.addComment = async (req, res) => {
     // (route-level authorize() should already restrict this to expert/community/farmer,
     // this is a second safety check)
     let commentType;
-    if (req.user.role === "expert") {
+    if (req.user.role === "agricultural_expert") {
       commentType = "expert";
-    } else if (req.user.role === "community") {
+    } else if (req.user.role === "community_user") {
       commentType = "community";
     } else if (req.user.role === "farmer") {
       commentType = "farmer";

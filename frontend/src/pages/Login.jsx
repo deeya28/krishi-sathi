@@ -19,23 +19,19 @@ export default function Login() {
   const handleChange = (e) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setStatus("submitting");
 
-    // TODO: swap for a real backend call, e.g.
-    // await fetch("/api/auth/login", { method: "POST", body: JSON.stringify(form) })
-    setTimeout(() => {
-      const result = login(form);
-      if (!result.ok) {
-        setStatus(null);
-        setError(result.error);
-        return;
-      }
-      setStatus("done");
-      navigate("/dashboard");
-    }, 700);
+    const result = await login(form);
+    if (!result.ok) {
+      setStatus(null);
+      setError(result.error);
+      return;
+    }
+    setStatus("done");
+    navigate("/dashboard");
   };
 
   return (

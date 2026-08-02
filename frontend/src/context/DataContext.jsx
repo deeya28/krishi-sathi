@@ -1,76 +1,58 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useAuth } from "./AuthContext";
+import { apiFetch } from "../utils/api";
 
 const DataContext = createContext(null);
 
-const POSTS_KEY = "ks_posts";
-const SAVED_KEY = "ks_saved";
+const SAVED_KEY  = "ks_saved";
 const NOTIFS_KEY = "ks_notifications";
 
-const SEED_POSTS = [
-  {
-    id: 1,
-    authorId: null,
-    name: "Ram Bahadur Thapa",
-    role: "Maize & Vegetable Farmer",
-    location: "Bharatpur, Chitwan",
-    farmSize: "2.5 Bigha",
-    badge: "Verified Farmer",
-    primaryCrops: ["Maize", "Tomatoes", "Cabbage"],
-    text: "This season's maize looks strong. Sharing my irrigation schedule with anyone who wants to try it.",
-    time: "2h",
-    likes: 12,
-    isLiked: false,
-    shares: 2,
-    isFollowing: false,
-    comments: [
-      { id: 101, name: "Suman Giri", text: "Please share the schedule! Very interested.", time: "1h" },
-    ],
-  },
-  {
-    id: 2,
-    authorId: null,
-    name: "Sunita Gurung",
-    role: "Organic Horticulture Specialist",
-    location: "Panchkhal, Kavre",
-    farmSize: "12 Ropani",
-    badge: "Organic Certified",
-    primaryCrops: ["Tomatoes", "Capsicum", "Leafy Greens"],
-    text: "Has anyone dealt with leaf blight on tomatoes this monsoon? Looking for biological control advice.",
-    time: "5h",
-    likes: 8,
-    isLiked: true,
-    shares: 0,
-    isFollowing: true,
-    comments: [
-      { id: 102, name: "Bimal Rai", text: "Try copper-based fungicides or neem extract early morning.", time: "3h" },
-    ],
-  },
-  {
-    id: 3,
-    authorId: null,
-    name: "Bimal Rai",
-    role: "Senior Agronomist & Consultant",
-    location: "Lalitpur, Bagmati",
-    farmSize: "Research Station",
-    badge: "Expert Agronomist",
-    primaryCrops: ["Soil Health", "Pest Management"],
-    text: "Posted a short guide on organic pest control for the community. Check it in Farming Tips.",
-    time: "1d",
-    likes: 24,
-    isLiked: false,
-    shares: 5,
-    isFollowing: false,
-    comments: [],
-  },
-];
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-const SEED_NOTIFICATIONS = [
-  { id: 1, type: "like", text: "Sunita Gurung liked your post.", time: "2h", read: false },
-  { id: 2, type: "comment", text: "Bimal Rai commented on a post you follow.", time: "5h", read: false },
-  { id: 3, type: "follow", text: "Suman Giri started following you.", time: "1d", read: true },
-  { id: 4, type: "system", text: "Welcome to Krishi Sathi! Complete your profile to get started.", time: "3d", read: true },
-];
+/** Map a backend post document to the shape the UI expects. */
+function mapPost(raw) {
+  const loc = raw.location || {};
+  const locationStr = [loc.district, loc.state].filter(Boolean).join(', ') || 'Nepal';
+
+  return {
+    // Identity
+    id:       raw._id,
+    authorId: raw.farmer?._id || null,
+    // Author display
+    name:     raw.farmer?.name  || 'Unknown',
+    role:     raw.farmer?.email || '',          // email shown as subtitle (no role in populate)
+    location: locationStr,
+    farmSize: '—',
+    badge:    null,
+    primaryCrops: [raw.cropName].filter(Boolean),
+    // Post content
+    text:       raw.description,
+    cropName:   raw.cropName,
+    issueType:  raw.issueType,
+    status:     raw.status,
+    media:      raw.media || [],
+    // Engagement
+    time:     raw.createdAt ? new Date(raw.createdAt).toLocaleDateString() : 'Now',
+    likes:    raw.likeCount  || 0,
+    isLiked:  raw.likedByMe  || false,
+    shares:   0,
+    isFollowing: false,
+    comments: [],           // loaded lazily when comment drawer opens
+  };
+}
+
+/** Map a backend comment document to the shape the UI expects. */
+function mapComment(raw) {
+  return {
+    id:           raw._id,
+    name:         raw.user?.name  || 'Unknown',
+    text:         raw.text,
+    time:         raw.createdAt ? new Date(raw.createdAt).toLocaleDateString() : 'Now',
+    commentType:  raw.commentType,
+  };
+}
 
 function loadJSON(key, fallback) {
   try {
@@ -81,59 +63,123 @@ function loadJSON(key, fallback) {
   }
 }
 
+const SEED_NOTIFICATIONS = [
+  { id: 1, type: "system", text: "Welcome to Krishi Sathi! Complete your profile to get started.", time: "Now", read: false },
+];
+
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
+
 export function DataProvider({ children }) {
   const { currentUser } = useAuth();
-  const [posts, setPosts] = useState(() => loadJSON(POSTS_KEY, SEED_POSTS));
-  const [savedIds, setSavedIds] = useState(() => loadJSON(SAVED_KEY, []));
-  const [notifications, setNotifications] = useState(() =>
-    loadJSON(NOTIFS_KEY, SEED_NOTIFICATIONS)
-  );
 
-  useEffect(() => {
-    localStorage.setItem(POSTS_KEY, JSON.stringify(posts));
-  }, [posts]);
+  const [posts,         setPosts]         = useState([]);
+  const [loading,       setLoading]       = useState(false);
+  const [savedIds,      setSavedIds]      = useState(() => loadJSON(SAVED_KEY, []));
+  const [notifications, setNotifications] = useState(() => loadJSON(NOTIFS_KEY, SEED_NOTIFICATIONS));
 
-  useEffect(() => {
-    localStorage.setItem(SAVED_KEY, JSON.stringify(savedIds));
-  }, [savedIds]);
+  // Persist saved / notifications to localStorage
+  useEffect(() => { localStorage.setItem(SAVED_KEY,  JSON.stringify(savedIds)); },      [savedIds]);
+  useEffect(() => { localStorage.setItem(NOTIFS_KEY, JSON.stringify(notifications)); }, [notifications]);
 
-  useEffect(() => {
-    localStorage.setItem(NOTIFS_KEY, JSON.stringify(notifications));
-  }, [notifications]);
+  // ------------------------------------------------------------------
+  // Fetch the post feed from the backend whenever the user changes
+  // ------------------------------------------------------------------
+  const fetchPosts = useCallback(async () => {
+    if (!currentUser) { setPosts([]); return; }
+    try {
+      setLoading(true);
+      const data = await apiFetch('/posts');
+      setPosts((data.posts || []).map(mapPost));
+    } catch (err) {
+      console.error('Failed to load posts:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser]);
 
-  const addPost = (text) => {
-    if (!text.trim()) return;
-    const newPost = {
-      id: Date.now(),
-      authorId: currentUser?.id || "guest",
-      name: currentUser?.name || "You",
-      role: currentUser?.role || "Community Member",
-      location: currentUser?.location || "Nepal",
-      farmSize: "—",
-      badge: currentUser ? null : "Guest",
-      primaryCrops: [],
-      text: text.trim(),
-      time: "Just now",
-      likes: 0,
-      isLiked: false,
-      shares: 0,
-      isFollowing: false,
-      comments: [],
-    };
-    setPosts((prev) => [newPost, ...prev]);
+  useEffect(() => { fetchPosts(); }, [fetchPosts]);
+
+  // ------------------------------------------------------------------
+  // Create post  (farmer only — backend enforces this)
+  // Accepts an optional array of File objects (photos/videos) and extra
+  // fields (cropName, issueType, location). Existing calls like
+  // addPost(postText) still work fine since files/extra default to [] / {}.
+  // ------------------------------------------------------------------
+  const addPost = async (text, files = [], extra = {}) => {
+    if (!text?.trim()) return;
+    try {
+      let data;
+
+      if (files.length > 0) {
+        // Files present - must send as multipart/form-data
+        const formData = new FormData();
+        formData.append('cropName', extra.cropName || 'General');
+        formData.append('description', text.trim());
+        formData.append('issueType', extra.issueType || 'other');
+        if (extra.location) {
+          formData.append('location', JSON.stringify(extra.location));
+        }
+        files.forEach((file) => formData.append('media', file));
+
+        data = await apiFetch('/posts', {
+          method: 'POST',
+          body: formData, // apiFetch detects FormData and skips the JSON header
+        });
+      } else {
+        // No files - plain JSON, same as before
+        data = await apiFetch('/posts', {
+          method: 'POST',
+          body: JSON.stringify({
+            cropName: extra.cropName || 'General',
+            description: text.trim(),
+            issueType: extra.issueType || 'other',
+          }),
+        });
+      }
+
+      // Prepend the new post to the feed
+      setPosts((prev) => [mapPost({ ...data.post, likeCount: 0, likedByMe: false }), ...prev]);
+    } catch (err) {
+      console.error('Failed to create post:', err.message);
+    }
   };
 
-  const deletePost = (id) => setPosts((prev) => prev.filter((p) => p.id !== id));
+  // ------------------------------------------------------------------
+  // Delete post  (owner only)
+  // ------------------------------------------------------------------
+  const deletePost = async (id) => {
+    try {
+      await apiFetch(`/posts/${id}`, { method: 'DELETE' });
+      setPosts((prev) => prev.filter((p) => p.id !== id));
+    } catch (err) {
+      console.error('Failed to delete post:', err.message);
+    }
+  };
 
-  const editPost = (id, text) =>
-    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, text } : p)));
+  // ------------------------------------------------------------------
+  // Edit post  (owner only)
+  // ------------------------------------------------------------------
+  const editPost = async (id, text) => {
+    try {
+      const data = await apiFetch(`/posts/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ description: text }),
+      });
+      setPosts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, text: data.post.description } : p))
+      );
+    } catch (err) {
+      console.error('Failed to edit post:', err.message);
+    }
+  };
 
-  const toggleFollow = (id) =>
-    setPosts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, isFollowing: !p.isFollowing } : p))
-    );
-
-  const toggleLike = (id) =>
+  // ------------------------------------------------------------------
+  // Toggle like
+  // ------------------------------------------------------------------
+  const toggleLike = async (id) => {
+    // Optimistic update
     setPosts((prev) =>
       prev.map((p) =>
         p.id === id
@@ -141,43 +187,101 @@ export function DataProvider({ children }) {
           : p
       )
     );
+    try {
+      const data = await apiFetch(`/likes/${id}`, { method: 'POST' });
+      // Sync actual count from server
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, likes: data.likeCount, isLiked: data.liked } : p
+        )
+      );
+    } catch (err) {
+      // Revert optimistic update on error
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
+            : p
+        )
+      );
+      console.error('Failed to toggle like:', err.message);
+    }
+  };
 
+  // ------------------------------------------------------------------
+  // Load comments for a specific post  (called when drawer opens)
+  // ------------------------------------------------------------------
+  const loadComments = async (postId) => {
+    try {
+      const data = await apiFetch(`/comments/${postId}`);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, comments: (data.comments || []).map(mapComment) }
+            : p
+        )
+      );
+    } catch (err) {
+      console.error('Failed to load comments:', err.message);
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Add comment
+  // ------------------------------------------------------------------
+  const addComment = async (postId, text) => {
+    if (!text?.trim()) return;
+    try {
+      const data = await apiFetch(`/comments/${postId}`, {
+        method: 'POST',
+        body: JSON.stringify({ text: text.trim() }),
+      });
+      const newComment = mapComment(data.comment);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p
+        )
+      );
+    } catch (err) {
+      console.error('Failed to add comment:', err.message);
+    }
+  };
+
+  // ------------------------------------------------------------------
+  // Follow toggle  (local-only — no backend endpoint yet)
+  // ------------------------------------------------------------------
+  const toggleFollow = (id) =>
+    setPosts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, isFollowing: !p.isFollowing } : p))
+    );
+
+  // ------------------------------------------------------------------
+  // Share  (local-only)
+  // ------------------------------------------------------------------
   const sharePost = (id) =>
     setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, shares: p.shares + 1 } : p)));
 
-  const addComment = (postId, text) => {
-    if (!text || !text.trim()) return;
-    const newComment = {
-      id: Date.now(),
-      name: currentUser?.name || "You",
-      text: text.trim(),
-      time: "Just now",
-    };
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p
-      )
-    );
-  };
-
+  // ------------------------------------------------------------------
+  // Saved posts  (localStorage-only — no backend equivalent)
+  // ------------------------------------------------------------------
   const toggleSave = (id) =>
     setSavedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
 
-  const markNotificationRead = (id) =>
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-
+  // ------------------------------------------------------------------
+  // Notifications  (localStorage-only)
+  // ------------------------------------------------------------------
+  const markNotificationRead    = (id) =>
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   const markAllNotificationsRead = () =>
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const clearNotifications       = () => setNotifications([]);
 
-  const clearNotifications = () => setNotifications([]);
-
-  const myPosts = posts.filter(
-    (p) => currentUser && p.authorId === currentUser.id
-  );
+  // ------------------------------------------------------------------
+  // Derived data
+  // ------------------------------------------------------------------
+  const myPosts    = posts.filter((p) => currentUser && p.authorId === currentUser.id);
   const savedPosts = posts.filter((p) => savedIds.includes(p.id));
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -190,6 +294,8 @@ export function DataProvider({ children }) {
         savedIds,
         notifications,
         unreadCount,
+        loading,
+        fetchPosts,
         addPost,
         deletePost,
         editPost,
@@ -197,6 +303,7 @@ export function DataProvider({ children }) {
         toggleLike,
         sharePost,
         addComment,
+        loadComments,
         toggleSave,
         markNotificationRead,
         markAllNotificationsRead,
