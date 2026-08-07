@@ -37,6 +37,20 @@ app.use('/api/comments', require('./routes/commentRoutes'));
 app.use('/api/likes', require('./routes/likeRoutes'));
 // -----------------------------------
 
+// --- CONNECTING OUR APPOINTMENT ROUTES ---
+// Any request that starts with '/api/appointments' will be sent to our
+// appointmentRoutes file. This handles viewing experts, booking appointments,
+// and eSewa payment verification.
+app.use('/api/appointments', require('./routes/appointmentRoutes'));
+// -----------------------------------------
+
+// --- CONNECTING OUR APPOINTMENT ROUTES ---
+// Any request that starts with '/api/appointments' will be sent to our
+// appointmentRoutes file. This handles viewing experts, booking appointments,
+// and eSewa payment verification.
+app.use('/api/appointments', require('./routes/appointmentRoutes'));
+// -----------------------------------------
+
 // Global Error Handler Middleware (Optional but highly recommended)
 // Catches structural errors like broken JSON payloads or database connection drops
 app.use((err, req, res, next) => {

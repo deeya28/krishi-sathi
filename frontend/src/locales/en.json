@@ -84,8 +84,11 @@
     "roleFarmer": "Farmer",
     "roleExpert": "Expert",
     "roleVendor": "Vendor",
+    "roleCommunity": "Community User",
     "createBtn": "Create Account",
-    "creating": "Creating account..."
+    "creating": "Creating account...",
+    "alreadyHaveAccount": "Already have an Account?",
+    "signIn": "Login"
   },
   "dashboard": {
     "searchPlaceholder": "Search posts, farmers...",

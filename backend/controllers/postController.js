@@ -1,9 +1,10 @@
 const Post = require("../models/postModel"); // adjust path to match your folder structure
 const Like = require("../models/likeModel");
 
-// @desc    Create a new post (farmer uploads crop photo/video with issue description)
+// @desc    Create a new post (any user - farmer, expert, or community - shares an
+// update, question, or crop issue with photos/videos)
 // @route   POST /api/posts
-// @access  Private (farmer)
+// @access  Private (farmer, agricultural_expert, community_user)
 exports.createPost = async (req, res) => {
   try {
     const { cropName, description, issueType, media, location } = req.body;
@@ -13,7 +14,7 @@ exports.createPost = async (req, res) => {
     }
 
     const post = await Post.create({
-      farmer: req.user._id, // assumes auth middleware sets req.user
+      farmer: req.user._id, // schema field name is "farmer" but stores the post's author regardless of role
       cropName,
       description,
       issueType,

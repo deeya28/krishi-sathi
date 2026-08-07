@@ -22,7 +22,18 @@ export default function Register() {
   const handleChange = (e) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
+<<<<<<< Updated upstream
   const handleSubmit = (e) => {
+=======
+  // Map UI display values to backend role enum values
+  const ROLE_MAP = {
+    Farmer: "farmer",
+    Expert: "agricultural_expert",
+    CommunityUser: "community_user",
+  };
+
+  const handleSubmit = async (e) => {
+>>>>>>> Stashed changes
     e.preventDefault();
     setError("");
     setStatus("submitting");
@@ -185,7 +196,7 @@ export default function Register() {
               >
                 <option value="Farmer">{t("register.roleFarmer")}</option>
                 <option value="Expert">{t("register.roleExpert")}</option>
-                <option value="Vendor">{t("register.roleVendor")}</option>
+                <option value="CommunityUser">{t("register.roleCommunity")}</option>
               </select>
             </div>
 
@@ -198,6 +209,19 @@ export default function Register() {
               {status === "submitting" ? t("register.creating") : t("register.createBtn")}
             </button>
           </form>
+
+          <p
+            className="text-center text-sm text-ink/60 mt-6"
+            style={{ fontFamily: "'Work Sans', sans-serif" }}
+          >
+            {t("register.alreadyHaveAccount")}{" "}
+            <Link
+              to="/login"
+              className="text-paddy-green font-medium hover:underline"
+            >
+              {t("register.signIn")}
+            </Link>
+          </p>
         </motion.div>
       </div>
 

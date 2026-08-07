@@ -19,8 +19,10 @@ exports.addComment = async (req, res) => {
     }
 
     // Determine comment type from the logged-in user's role
-    // (route-level authorize() should already restrict this to expert/community/farmer,
+    // (route-level authorize() should already restrict this to the roles below,
     // this is a second safety check)
+    // NOTE: commentType values ("expert"/"community"/"farmer") stay the same -
+    // only the incoming req.user.role values match your actual User model roles.
     let commentType;
     if (req.user.role === "expert") {
       commentType = "expert";

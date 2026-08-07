@@ -10,6 +10,8 @@ import MyPosts from "./pages/MyPosts";
 import SavedPosts from "./pages/SavedPosts";
 import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
+import AppointmentSuccess from "./pages/AppointmentSuccess";
+import AppointmentFailed from "./pages/AppointmentFailed";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -80,6 +82,22 @@ function App() {
         element={
           <ProtectedRoute>
             <Expert />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/appointment-success"
+        element={
+          <ProtectedRoute>
+            <AppointmentSuccess />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/appointment-failed"
+        element={
+          <ProtectedRoute>
+            <AppointmentFailed />
           </ProtectedRoute>
         }
       />
