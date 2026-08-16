@@ -3,6 +3,14 @@ import DashboardLayout from "../components/dashboard/DashboardLayout";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { PinIcon, PostIcon } from "../components/Icons";
+import PostMediaGrid from "../components/dashboard/PostMediaGrid";
+
+const ROLE_LABELS = {
+  farmer: "Farmer",
+  agricultural_expert: "Agricultural Expert",
+  community_user: "Community User",
+  admin: "Admin",
+};
 
 export default function Profile() {
   const { currentUser, updateProfile } = useAuth();
@@ -10,19 +18,20 @@ export default function Profile() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     name: currentUser?.name || "",
-    role: currentUser?.role || "Farmer",
+    role: currentUser?.role || "farmer",
     location: currentUser?.location || "",
     bio: currentUser?.bio || "",
   });
 
+  const displayRole = ROLE_LABELS[currentUser?.role] || currentUser?.role || "Farmer";
   const initial = currentUser?.name?.trim()?.[0]?.toUpperCase() || "K";
 
   const handleChange = (e) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
-    updateProfile(form);
+    await updateProfile(form);
     setEditing(false);
   };
 
@@ -49,7 +58,7 @@ export default function Profile() {
             </h2>
             <p className="text-sm text-ink/60">{currentUser?.email}</p>
             <span className="inline-block mt-1 text-[11px] bg-paddy-green/10 text-paddy-green font-bold px-2 py-0.5 rounded border border-paddy-green/20">
-              {currentUser?.role}
+              {displayRole}
             </span>
           </div>
           {!editing && (
@@ -86,9 +95,9 @@ export default function Profile() {
                 onChange={handleChange}
                 className="w-full bg-white border border-soil/20 rounded-md px-3 py-2 text-sm text-ink focus:outline-none focus:border-paddy-green"
               >
-                <option value="Farmer">Farmer</option>
-                <option value="Expert">Expert</option>
-                <option value="Vendor">Vendor</option>
+                <option value="farmer">Farmer</option>
+                <option value="agricultural_expert">Agricultural Expert</option>
+                <option value="community_user">Community User</option>
               </select>
             </div>
             <div>
@@ -162,6 +171,7 @@ export default function Profile() {
           {myPosts.map((post) => (
             <div key={post.id} className="bg-white/60 border border-soil/10 rounded-md p-4">
               <p className="text-sm text-ink/85 leading-relaxed">{post.text}</p>
+              <PostMediaGrid media={post.media} />
               <p className="text-xs text-ink/40 mt-2">{post.time}</p>
             </div>
           ))}

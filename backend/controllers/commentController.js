@@ -1,5 +1,6 @@
 const Comment = require("../models/commentModel");
 const Post = require("../models/postModel");
+const { createNotification } = require("./notificationController");
 
 // @desc    Add a comment on a post (expert advice or community market value)
 // @route   POST /api/comments/:postId
@@ -19,12 +20,14 @@ exports.addComment = async (req, res) => {
     }
 
     // Determine comment type from the logged-in user's role
-    // (route-level authorize() should already restrict this to expert/community/farmer,
+    // (route-level authorize() should already restrict this to the roles below,
     // this is a second safety check)
+    // NOTE: commentType values ("expert"/"community"/"farmer") stay the same -
+    // only the incoming req.user.role values match your actual User model roles.
     let commentType;
-    if (req.user.role === "expert") {
+    if (req.user.role === "agricultural_expert") {
       commentType = "expert";
-    } else if (req.user.role === "community") {
+    } else if (req.user.role === "community_user") {
       commentType = "community";
     } else if (req.user.role === "farmer") {
       commentType = "farmer";
@@ -46,6 +49,18 @@ exports.addComment = async (req, res) => {
       post.status = "expert_responded";
       await post.save();
     }
+
+    // Notify the post owner (skipped automatically if they commented on their own post)
+    await createNotification({
+      recipient: post.farmer,
+      type: "comment",
+      text:
+        commentType === "expert"
+          ? "An expert commented on your post."
+          : "Someone commented on your post.",
+      relatedPost: post._id,
+      fromUser: req.user._id,
+    });
 
     res.status(201).json({ message: "Comment added successfully", comment });
   } catch (error) {
@@ -74,7 +89,7 @@ exports.getCommentsByPost = async (req, res) => {
   }
 };
 
-// @desc    Delete a comment (only by the user who created it)
+// @desc    Delete a comment (by the user who created it, or by an admin for moderation)
 // @route   DELETE /api/comments/:id
 // @access  Private
 exports.deleteComment = async (req, res) => {
@@ -85,7 +100,10 @@ exports.deleteComment = async (req, res) => {
       return res.status(404).json({ message: "Comment not found" });
     }
 
-    if (comment.user.toString() !== req.user._id.toString()) {
+    const isOwner = comment.user.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === "admin";
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({ message: "Not authorized to delete this comment" });
     }
 

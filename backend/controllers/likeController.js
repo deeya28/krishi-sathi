@@ -1,5 +1,6 @@
 const Like = require("../models/likeModel");
 const Post = require("../models/postModel");
+const { createNotification } = require("./notificationController");
 
 // @desc    Toggle like on a post (like if not liked, unlike if already liked)
 // @route   POST /api/likes/:postId
@@ -25,6 +26,16 @@ exports.toggleLike = async (req, res) => {
     // Not liked yet -> like (create it)
     await Like.create({ post: postId, user: req.user._id });
     const likeCount = await Like.countDocuments({ post: postId });
+
+    // Notify the post owner (skipped automatically if they liked their own post)
+    await createNotification({
+      recipient: post.farmer,
+      type: "like",
+      text: "Someone liked your post.",
+      relatedPost: post._id,
+      fromUser: req.user._id,
+    });
+
     res.status(201).json({ message: "Post liked", liked: true, likeCount });
   } catch (error) {
     // Handles the rare race-condition case where the unique index blocks a duplicate

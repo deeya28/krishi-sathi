@@ -2,18 +2,36 @@ const express = require('express');
 const router = express.Router();
 
 // Import controllers
-const { registerUser, loginUser } = require('../controllers/authController');
+const {
+    registerUser,
+    loginUser,
+    updateUserProfile,
+    forgotPassword,
+    resetPassword,
+    changePassword,
+} = require('../controllers/authController');
 
 // Import authentication middleware and Roles enum
 const { protect, authorizeRoles } = require('../middleware/authMiddleware');
 const { Roles } = require('../models/userModel');
 
 // ==========================================
-// PUBLIC ROUTES
+// PUBLIC & PROTECTED AUTH ROUTES
 // ==========================================
 // Anyone can hit these endpoints to register or log in
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+router.put('/profile', protect, updateUserProfile);
+
+// ==========================================
+// PASSWORD RESET / CHANGE ROUTES
+// ==========================================
+// Logged-out user requests a reset link via email
+router.post('/forgot-password', forgotPassword);
+// Logged-out user submits a new password using the token from that email
+router.put('/reset-password/:token', resetPassword);
+// Logged-in user changes their password, knowing the current one
+router.put('/change-password', protect, changePassword);
 
 // ==========================================
 // PROTECTED ROLE-SPECIFIC ROUTES (Examples)
