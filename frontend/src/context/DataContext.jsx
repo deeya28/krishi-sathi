@@ -1,75 +1,14 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 
 const DataContext = createContext(null);
 
-const POSTS_KEY = "ks_posts";
-const SAVED_KEY = "ks_saved";
-const NOTIFS_KEY = "ks_notifications";
-
-const SEED_POSTS = [
-  {
-    id: 1,
-    authorId: null,
-    name: "Ram Bahadur Thapa",
-    role: "Maize & Vegetable Farmer",
-    location: "Bharatpur, Chitwan",
-    farmSize: "2.5 Bigha",
-    badge: "Verified Farmer",
-    primaryCrops: ["Maize", "Tomatoes", "Cabbage"],
-    text: "This season's maize looks strong. Sharing my irrigation schedule with anyone who wants to try it.",
-    time: "2h",
-    likes: 12,
-    isLiked: false,
-    shares: 2,
-    isFollowing: false,
-    comments: [
-      { id: 101, name: "Suman Giri", text: "Please share the schedule! Very interested.", time: "1h" },
-    ],
-  },
-  {
-    id: 2,
-    authorId: null,
-    name: "Sunita Gurung",
-    role: "Organic Horticulture Specialist",
-    location: "Panchkhal, Kavre",
-    farmSize: "12 Ropani",
-    badge: "Organic Certified",
-    primaryCrops: ["Tomatoes", "Capsicum", "Leafy Greens"],
-    text: "Has anyone dealt with leaf blight on tomatoes this monsoon? Looking for biological control advice.",
-    time: "5h",
-    likes: 8,
-    isLiked: true,
-    shares: 0,
-    isFollowing: true,
-    comments: [
-      { id: 102, name: "Bimal Rai", text: "Try copper-based fungicides or neem extract early morning.", time: "3h" },
-    ],
-  },
-  {
-    id: 3,
-    authorId: null,
-    name: "Bimal Rai",
-    role: "Senior Agronomist & Consultant",
-    location: "Lalitpur, Bagmati",
-    farmSize: "Research Station",
-    badge: "Expert Agronomist",
-    primaryCrops: ["Soil Health", "Pest Management"],
-    text: "Posted a short guide on organic pest control for the community. Check it in Farming Tips.",
-    time: "1d",
-    likes: 24,
-    isLiked: false,
-    shares: 5,
-    isFollowing: false,
-    comments: [],
-  },
-];
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const SAVED_KEY = "ks_saved"; // bookmarks - local only, no backend endpoint for this yet
+const NOTIFS_KEY = "ks_notifications"; // local only until notification wiring is confirmed
 
 const SEED_NOTIFICATIONS = [
-  { id: 1, type: "like", text: "Sunita Gurung liked your post.", time: "2h", read: false },
-  { id: 2, type: "comment", text: "Bimal Rai commented on a post you follow.", time: "5h", read: false },
-  { id: 3, type: "follow", text: "Suman Giri started following you.", time: "1d", read: true },
-  { id: 4, type: "system", text: "Welcome to Krishi Sathi! Complete your profile to get started.", time: "3d", read: true },
+  { id: 1, type: "system", text: "Welcome to Krishi Sathi! Complete your profile to get started.", time: "3d", read: true },
 ];
 
 function loadJSON(key, fallback) {
@@ -81,17 +20,113 @@ function loadJSON(key, fallback) {
   }
 }
 
+// Turns an ISO date string into a short relative label
+function timeAgo(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return date.toLocaleDateString();
+}
+
+// Maps a User.role value to the commentType enum the backend expects
+function commentTypeForRole(role) {
+  if (role === "agricultural_expert") return "expert";
+  if (role === "farmer") return "farmer";
+  return "community";
+}
+
+// Normalizes a raw post from the API into the shape the UI uses
+function normalizePost(raw) {
+  return {
+    id: raw._id,
+    authorId: raw.farmer?._id || raw.farmer,
+    name: raw.farmer?.name || "Unknown user",
+    cropName: raw.cropName,
+    text: raw.description,
+    issueType: raw.issueType,
+    media: raw.media || [],
+    location: raw.location?.district || raw.location?.state || "",
+    createdAt: raw.createdAt,
+    time: timeAgo(raw.createdAt),
+    likes: raw.likeCount ?? 0,
+    isLiked: !!raw.likedByMe,
+    status: raw.status,
+    // Not yet loaded on the feed list endpoint - filled in lazily by fetchFollowInfo/shares
+    isFollowing: false,
+    shares: raw.shareCount ?? 0,
+  };
+}
+
+function normalizeComment(c) {
+  return {
+    id: c._id,
+    name: c.user?.name || "Unknown",
+    text: c.text,
+    time: timeAgo(c.createdAt),
+  };
+}
+
 export function DataProvider({ children }) {
-  const { currentUser } = useAuth();
-  const [posts, setPosts] = useState(() => loadJSON(POSTS_KEY, SEED_POSTS));
+  const { currentUser, token } = useAuth();
+  const [posts, setPosts] = useState([]);
+  const [myPosts, setMyPosts] = useState([]);
   const [savedIds, setSavedIds] = useState(() => loadJSON(SAVED_KEY, []));
+  const [commentsByPost, setCommentsByPost] = useState({});
   const [notifications, setNotifications] = useState(() =>
     loadJSON(NOTIFS_KEY, SEED_NOTIFICATIONS)
   );
+  const [loading, setLoading] = useState(false);
+
+  const authHeaders = useCallback(
+    () => ({
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }),
+    [token]
+  );
+
+  const fetchPosts = useCallback(async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/posts`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) setPosts((data.posts || []).map(normalizePost));
+    } catch (err) {
+      console.error("Failed to load posts", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, authHeaders]);
+
+  const fetchMyPosts = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/posts/my-posts`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) setMyPosts((data.posts || []).map(normalizePost));
+    } catch (err) {
+      console.error("Failed to load your posts", err);
+    }
+  }, [token, authHeaders]);
 
   useEffect(() => {
-    localStorage.setItem(POSTS_KEY, JSON.stringify(posts));
-  }, [posts]);
+    if (token) {
+      fetchPosts();
+      fetchMyPosts();
+    } else {
+      setPosts([]);
+      setMyPosts([]);
+    }
+  }, [token, fetchPosts, fetchMyPosts]);
 
   useEffect(() => {
     localStorage.setItem(SAVED_KEY, JSON.stringify(savedIds));
@@ -101,39 +136,63 @@ export function DataProvider({ children }) {
     localStorage.setItem(NOTIFS_KEY, JSON.stringify(notifications));
   }, [notifications]);
 
-  const addPost = (text) => {
-    if (!text.trim()) return;
-    const newPost = {
-      id: Date.now(),
-      authorId: currentUser?.id || "guest",
-      name: currentUser?.name || "You",
-      role: currentUser?.role || "Community Member",
-      location: currentUser?.location || "Nepal",
-      farmSize: "—",
-      badge: currentUser ? null : "Guest",
-      primaryCrops: [],
-      text: text.trim(),
-      time: "Just now",
-      likes: 0,
-      isLiked: false,
-      shares: 0,
-      isFollowing: false,
-      comments: [],
-    };
-    setPosts((prev) => [newPost, ...prev]);
+  // --- CREATE POST ---
+  // Text-only for now. Nothing is required except text or media - the
+  // backend accepts a bare description with no cropName/issueType.
+  const addPost = async (text) => {
+    if (!text.trim()) return { ok: false, error: "Add some text to post." };
+    try {
+      const res = await fetch(`${API_URL}/posts`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          description: text.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data.message || "Failed to create post." };
+      await Promise.all([fetchPosts(), fetchMyPosts()]);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: "Could not connect to the server." };
+    }
   };
 
-  const deletePost = (id) => setPosts((prev) => prev.filter((p) => p.id !== id));
+  const deletePost = async (id) => {
+    try {
+      const res = await fetch(`${API_URL}/posts/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        setPosts((prev) => prev.filter((p) => p.id !== id));
+        setMyPosts((prev) => prev.filter((p) => p.id !== id));
+      }
+    } catch (err) {
+      console.error("Failed to delete post", err);
+    }
+  };
 
-  const editPost = (id, text) =>
-    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, text } : p)));
+  const editPost = async (id, text) => {
+    try {
+      const res = await fetch(`${API_URL}/posts/${id}`, {
+        method: "PUT",
+        headers: authHeaders(),
+        body: JSON.stringify({ description: text }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const updated = normalizePost(data.post);
+        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updated } : p)));
+        setMyPosts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updated } : p)));
+      }
+    } catch (err) {
+      console.error("Failed to edit post", err);
+    }
+  };
 
-  const toggleFollow = (id) =>
-    setPosts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, isFollowing: !p.isFollowing } : p))
-    );
-
-  const toggleLike = (id) =>
+  // --- LIKES ---
+  const toggleLike = async (id) => {
     setPosts((prev) =>
       prev.map((p) =>
         p.id === id
@@ -141,43 +200,109 @@ export function DataProvider({ children }) {
           : p
       )
     );
-
-  const sharePost = (id) =>
-    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, shares: p.shares + 1 } : p)));
-
-  const addComment = (postId, text) => {
-    if (!text || !text.trim()) return;
-    const newComment = {
-      id: Date.now(),
-      name: currentUser?.name || "You",
-      text: text.trim(),
-      time: "Just now",
-    };
-    setPosts((prev) =>
-      prev.map((p) =>
-        p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p
-      )
-    );
+    try {
+      const res = await fetch(`${API_URL}/likes/${id}`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      if (!res.ok) fetchPosts(); // revert to real state on failure
+    } catch (err) {
+      fetchPosts();
+    }
   };
 
+  // --- COMMENTS (lazy-loaded per post) ---
+  const fetchComments = async (postId) => {
+    try {
+      const res = await fetch(`${API_URL}/comments/${postId}`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) {
+        const list = (data.comments || data || []).map(normalizeComment);
+        setCommentsByPost((prev) => ({ ...prev, [postId]: list }));
+      }
+    } catch (err) {
+      console.error("Failed to load comments", err);
+    }
+  };
+
+  const addComment = async (postId, text) => {
+    if (!text || !text.trim()) return;
+    try {
+      const res = await fetch(`${API_URL}/comments/${postId}`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          text: text.trim(),
+          commentType: commentTypeForRole(currentUser?.role),
+        }),
+      });
+      if (res.ok) await fetchComments(postId);
+    } catch (err) {
+      console.error("Failed to add comment", err);
+    }
+  };
+
+  // --- SAVE / BOOKMARK (local only - no backend endpoint for this yet) ---
   const toggleSave = (id) =>
-    setSavedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setSavedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
+  // --- FOLLOW (real backend, POST /api/follows/:userId toggles) ---
+  // Follow is keyed by the *author's user ID*, not the post ID - one follow
+  // status applies across all of that author's posts, so we update every
+  // post by that author in the feed at once.
+  const toggleFollow = async (authorId) => {
+    if (!authorId) return;
+    setPosts((prev) =>
+      prev.map((p) => (p.authorId === authorId ? { ...p, isFollowing: !p.isFollowing } : p))
+    );
+    try {
+      const res = await fetch(`${API_URL}/follows/${authorId}`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      if (!res.ok) fetchPosts(); // revert on failure
+    } catch (err) {
+      fetchPosts();
+    }
+  };
+
+  // Fetch follow info (counts + isFollowing) for one profile - used on the
+  // profile page, not the feed (feed toggle above is optimistic/local).
+  const fetchFollowInfo = async (userId) => {
+    try {
+      const res = await fetch(`${API_URL}/follows/${userId}`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) return data; // { followerCount, followingCount, isFollowing }
+    } catch (err) {
+      console.error("Failed to load follow info", err);
+    }
+    return null;
+  };
+
+  // --- SHARE (real backend, POST /api/shares/:postId records a share) ---
+  const sharePost = async (id) => {
+    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, shares: p.shares + 1 } : p)));
+    try {
+      const res = await fetch(`${API_URL}/shares/${id}`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, shares: data.shareCount } : p)));
+      }
+    } catch (err) {
+      console.error("Failed to record share", err);
+    }
+  };
+
+  // --- NOTIFICATIONS (local only until backend wiring is confirmed) ---
   const markNotificationRead = (id) =>
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-    );
-
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   const markAllNotificationsRead = () =>
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-
   const clearNotifications = () => setNotifications([]);
 
-  const myPosts = posts.filter(
-    (p) => currentUser && p.authorId === currentUser.id
-  );
   const savedPosts = posts.filter((p) => savedIds.includes(p.id));
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -188,14 +313,19 @@ export function DataProvider({ children }) {
         myPosts,
         savedPosts,
         savedIds,
+        loading,
+        commentsByPost,
         notifications,
         unreadCount,
+        fetchPosts,
         addPost,
         deletePost,
         editPost,
         toggleFollow,
+        fetchFollowInfo,
         toggleLike,
         sharePost,
+        fetchComments,
         addComment,
         toggleSave,
         markNotificationRead,

@@ -20,23 +20,24 @@ export default function Login() {
   const handleChange = (e) =>
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setStatus("submitting");
 
-    // TODO: swap for a real backend call, e.g.
-    // await fetch("/api/auth/login", { method: "POST", body: JSON.stringify(form) })
-    setTimeout(() => {
-      const result = login(form);
+    try {
+      const result = await login(form);
       if (!result.ok) {
         setStatus(null);
-        setError(result.error);
+        setError(result.error || "Login failed.");
         return;
       }
       setStatus("done");
       navigate("/dashboard");
-    }, 700);
+    } catch (err) {
+      setStatus(null);
+      setError("An unexpected error occurred during login.");
+    }
   };
 
   return (
@@ -126,12 +127,21 @@ export default function Login() {
             </div>
 
             <div>
-              <label
-                className="block text-xs uppercase tracking-wide text-ink/80 mb-2"
-                style={{ fontFamily: "'JetBrains Mono', monospace" }}
-              >
-                {t("login.passwordLabel")}
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label
+                  className="block text-xs uppercase tracking-wide text-ink/80"
+                  style={{ fontFamily: "'JetBrains Mono', monospace" }}
+                >
+                  {t("login.passwordLabel")}
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-paddy-green hover:underline"
+                  style={{ fontFamily: "'Work Sans', sans-serif" }}
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}

@@ -255,3 +255,24 @@ export function TrashIcon(props) {
     </svg>
   );
 }
+
+export function ImageIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" {...props}>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <path d="m20.5 15-5-5-8 8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="m6.5 17.5 4-4 2.5 2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function VideoIcon(props) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" {...props}>
+      <rect x="2.5" y="5" width="14" height="14" rx="2" />
+      <path d="m16.5 9.5 5-3.5v12l-5-3.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+

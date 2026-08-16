@@ -2,20 +2,9 @@ import { createContext, useContext, useState } from "react";
 
 const AuthContext = createContext(null);
 
-const USERS_KEY = "ks_users";
-const SESSION_KEY = "ks_session";
+const SESSION_KEY = "ks_session"; // stores { token, user }
 
-function loadUsers() {
-  try {
-    return JSON.parse(localStorage.getItem(USERS_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 function loadSession() {
   try {
@@ -25,73 +14,106 @@ function loadSession() {
   }
 }
 
-export function AuthProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(loadSession);
+function normalizeRole(role) {
+  return (role || "farmer").toLowerCase();
+}
 
-  // Creates the account, but does NOT log the user in.
-  // Returns { ok: true } or { ok: false, error }
-  const register = ({ name, email, password, role }) => {
-    const users = loadUsers();
-    const exists = users.some(
-      (u) => u.email.toLowerCase() === email.toLowerCase()
-    );
-    if (exists) {
-      return { ok: false, error: "An account with this email already exists." };
+export function AuthProvider({ children }) {
+  const session = loadSession();
+  const [currentUser, setCurrentUser] = useState(session?.user || null);
+  const [token, setToken] = useState(session?.token || null);
+
+  const register = async ({ name, email, password, role }) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          role: normalizeRole(role),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { ok: false, error: data.message || "Registration failed." };
+      }
+
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: "Could not connect to the server. Is the backend running?" };
     }
-    const newUser = {
-      id: Date.now(),
-      name,
-      email,
-      password, // Demo-only, front-end storage. Never store plaintext passwords in production.
-      role: role || "Farmer",
-      bio: "",
-      location: "",
-      avatarColor: "#2F5233",
-      createdAt: new Date().toISOString(),
-    };
-    users.push(newUser);
-    saveUsers(users);
-    return { ok: true };
   };
 
-  // Returns { ok: true, user } or { ok: false, error }
-  const login = ({ email, password }) => {
-    const users = loadUsers();
-    const user = users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase()
-    );
-    if (!user || user.password !== password) {
-      return { ok: false, error: "Incorrect email or password." };
+  const login = async ({ email, password }) => {
+    try {
+      const response = await fetch(`${API_URL}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { ok: false, error: data.message || "Incorrect email or password." };
+      }
+
+      const { token: authToken, ...user } = data;
+
+      setCurrentUser(user);
+      setToken(authToken);
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ token: authToken, user }));
+
+      return { ok: true, user };
+    } catch (error) {
+      return { ok: false, error: "Could not connect to the server. Is the backend running?" };
     }
-    // eslint-disable-next-line no-unused-vars
-    const { password: _pw, ...safeUser } = user;
-    setCurrentUser(safeUser);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(safeUser));
-    return { ok: true, user: safeUser };
   };
 
   const logout = () => {
     setCurrentUser(null);
+    setToken(null);
     localStorage.removeItem(SESSION_KEY);
   };
 
-  const updateProfile = (updates) => {
-    if (!currentUser) return;
-    const users = loadUsers();
-    const idx = users.findIndex((u) => u.id === currentUser.id);
-    if (idx !== -1) {
-      users[idx] = { ...users[idx], ...updates };
-      saveUsers(users);
+  const updateProfile = async (updates) => {
+    if (!currentUser || !token) return { ok: false, error: "Not logged in." };
+
+    try {
+      const response = await fetch(`${API_URL}/auth/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return { ok: false, error: data.message || "Update failed." };
+      }
+
+      const updatedUser = { ...currentUser, ...updates };
+      setCurrentUser(updatedUser);
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ token, user: updatedUser }));
+
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: "Could not connect to the server." };
     }
-    const updated = { ...currentUser, ...updates };
-    setCurrentUser(updated);
-    localStorage.setItem(SESSION_KEY, JSON.stringify(updated));
   };
 
   return (
     <AuthContext.Provider
       value={{
         currentUser,
+        token,
         isAuthenticated: !!currentUser,
         register,
         login,

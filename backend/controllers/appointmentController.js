@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const Appointment = require("../models/appointmentModel");
 const { User } = require("../models/userModel");
+const { createNotification } = require("./notificationController");
 
 // --- eSewa sandbox config ---
 // These are eSewa's PUBLIC test credentials for the sandbox environment.
@@ -143,6 +144,20 @@ exports.verifyPayment = async (req, res) => {
     appointment.status = "confirmed";
     appointment.esewaRefId = decoded.ref_id || statusData.ref_id;
     await appointment.save();
+
+    // Notify both the farmer and the expert that the appointment is confirmed
+    await createNotification({
+      recipient: appointment.farmer,
+      type: "appointment",
+      text: "Your appointment has been confirmed and paid.",
+      relatedAppointment: appointment._id,
+    });
+    await createNotification({
+      recipient: appointment.expert,
+      type: "appointment",
+      text: "You have a new confirmed appointment booking.",
+      relatedAppointment: appointment._id,
+    });
 
     res.redirect(`${FRONTEND_URL}/appointment-success?appointmentId=${appointment._id}`);
   } catch (error) {

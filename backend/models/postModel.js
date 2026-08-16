@@ -11,13 +11,13 @@ const postSchema = new Schema(
     },
     cropName: {
       type: String,
-      required: true,
       trim: true,
+      default: "",
     },
     description: {
       type: String,
-      required: true,
       trim: true,
+      default: "",
     },
     issueType: {
       type: String, // e.g. "disease", "pest", "nutrient deficiency", "other"
