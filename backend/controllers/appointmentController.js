@@ -3,27 +3,23 @@ const Appointment = require("../models/appointmentModel");
 const { User } = require("../models/userModel");
 const { createNotification } = require("./notificationController");
 
-// --- eSewa sandbox config ---
-// These are eSewa's PUBLIC test credentials for the sandbox environment.
-// In production, move these to your .env file and use your real merchant credentials.
-const ESEWA_MERCHANT_CODE = process.env.ESEWA_MERCHANT_CODE || "EPAYTEST";
+// --- eSewa configuration ---
 
-const ESEWA_SECRET_KEY =
-  process.env.ESEWA_SECRET_KEY || "8gBm/:&EnhH.1/q(";
+const ESEWA_MERCHANT_CODE = process.env.ESEWA_MERCHANT_CODE;
+const ESEWA_SECRET_KEY = process.env.ESEWA_SECRET_KEY || "8gBm/:&EnhH.1/q";
+
+const ESEWA_FORM_URL =
+  process.env.ESEWA_FORM_URL ||
+  "https://rc-epay.esewa.com.np/api/epay/main/v2/form";
 
 const ESEWA_STATUS_URL =
+  process.env.ESEWA_STATUS_URL ||
   "https://rc.esewa.com.np/api/epay/transaction/status/";
-  
-const ESEWA_STATUS_URL = "https://rc.esewa.com.np/api/epay/transaction/status";
 
-// Base URLs eSewa redirects back to after payment - point these at your backend
-// so you can verify the payment before showing the result to the farmer.
-const SUCCESS_URL = process.env.ESEWA_SUCCESS_URL || "http://localhost:8000/api/appointments/verify";
-const FAILURE_URL = process.env.ESEWA_FAILURE_URL || "http://localhost:8000/api/appointments/payment-failed";
+const SUCCESS_URL = process.env.ESEWA_SUCCESS_URL;
+const FAILURE_URL = process.env.ESEWA_FAILURE_URL;
 
-// Your frontend's base URL - after verifying payment, we redirect the user's
-// browser here so they see an actual page instead of raw JSON.
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
+const FRONTEND_URL = process.env.FRONTEND_URL;
 
 // Generates the HMAC-SHA256 signature eSewa requires, base64-encoded
 function generateSignature(totalAmount, transactionUuid, productCode) {
