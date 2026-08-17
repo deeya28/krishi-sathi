@@ -8,7 +8,7 @@ const { createNotification } = require("./notificationController");
 
 // @desc    Farmer books an appointment with an expert
 // @route   POST /api/appointments
-// @access  Private (farmer)
+// @access  Private
 exports.createAppointment = async (req, res) => {
   try {
     const {
@@ -19,6 +19,7 @@ exports.createAppointment = async (req, res) => {
       timeSlot,
     } = req.body;
 
+    // Validate required fields
     if (!expertId || !reason || !appointmentDate || !timeSlot) {
       return res.status(400).json({
         message:
@@ -32,6 +33,13 @@ exports.createAppointment = async (req, res) => {
     if (!expert || expert.role !== "agricultural_expert") {
       return res.status(404).json({
         message: "Selected expert not found",
+      });
+    }
+
+    // Prevent an expert from booking an appointment with themselves
+    if (expertId.toString() === req.user._id.toString()) {
+      return res.status(400).json({
+        message: "You cannot book an appointment with yourself",
       });
     }
 
@@ -72,11 +80,12 @@ exports.createAppointment = async (req, res) => {
 
 // @desc    Get list of agricultural experts
 // @route   GET /api/appointments/experts
-// @access  Private (farmer)
+// @access  Private
 exports.getExperts = async (req, res) => {
   try {
     const experts = await User.find({
       role: "agricultural_expert",
+      _id: { $ne: req.user._id },
     }).select("name email location bio isVerified");
 
     res.status(200).json({
@@ -97,7 +106,7 @@ exports.getExperts = async (req, res) => {
 
 // @desc    Get logged-in farmer's appointments
 // @route   GET /api/appointments/my-appointments
-// @access  Private (farmer)
+// @access  Private
 exports.getMyAppointments = async (req, res) => {
   try {
     const appointments = await Appointment.find({
@@ -171,18 +180,21 @@ exports.cancelAppointment = async (req, res) => {
     const isExpert =
       appointment.expert.toString() === req.user._id.toString();
 
+    // Check authorization
     if (!isFarmer && !isExpert) {
       return res.status(403).json({
         message: "Not authorized to cancel this appointment",
       });
     }
 
+    // Check if already cancelled
     if (appointment.status === "cancelled") {
       return res.status(400).json({
         message: "Appointment is already cancelled",
       });
     }
 
+    // Completed appointments cannot be cancelled
     if (appointment.status === "completed") {
       return res.status(400).json({
         message: "Completed appointments cannot be cancelled",
@@ -196,6 +208,7 @@ exports.cancelAppointment = async (req, res) => {
       });
     }
 
+    // Update appointment status
     appointment.status = "cancelled";
 
     await appointment.save();

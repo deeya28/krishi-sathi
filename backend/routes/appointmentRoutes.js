@@ -12,36 +12,46 @@ const {
 const { protect } = require("../middleware/authMiddleware");
 const { authorize } = require("../middleware/roleMiddleware");
 
+const ANY_ROLE = [
+  "farmer",
+  "agricultural_expert",
+  "community_user",
+  "admin",
+];
+
 // ==========================================
 // GET ALL AGRICULTURAL EXPERTS
 // ==========================================
-// Used by farmers when booking an appointment
+// Any logged-in user can view available experts
+// @route   GET /api/appointments/experts
 router.get(
   "/experts",
   protect,
-  authorize("farmer"),
+  authorize(...ANY_ROLE),
   getExperts
 );
 
 // ==========================================
 // CREATE APPOINTMENT
 // ==========================================
-// Farmer books an appointment with an expert
+// Any logged-in user can book an appointment
+// @route   POST /api/appointments
 router.post(
   "/",
   protect,
-  authorize("farmer"),
+  authorize(...ANY_ROLE),
   createAppointment
 );
 
 // ==========================================
 // FARMER APPOINTMENTS
 // ==========================================
-// Farmer views their upcoming and past appointments
+// Farmer views their appointments
+// @route   GET /api/appointments/my-appointments
 router.get(
   "/my-appointments",
   protect,
-  authorize("farmer"),
+  authorize(...ANY_ROLE),
   getMyAppointments
 );
 
@@ -49,6 +59,7 @@ router.get(
 // EXPERT APPOINTMENTS
 // ==========================================
 // Agricultural expert views appointments booked with them
+// @route   GET /api/appointments/expert-appointments
 router.get(
   "/expert-appointments",
   protect,
@@ -60,6 +71,7 @@ router.get(
 // CANCEL APPOINTMENT
 // ==========================================
 // Farmer or expert can cancel an appointment
+// @route   PATCH /api/appointments/:id/cancel
 router.patch(
   "/:id/cancel",
   protect,

@@ -62,6 +62,10 @@ function normalizePost(raw) {
     // Not yet loaded on the feed list endpoint - filled in lazily by fetchFollowInfo/shares
     isFollowing: false,
     shares: raw.shareCount ?? 0,
+    // Comments are lazy-loaded per post into commentsByPost via fetchComments;
+    // this is just a lightweight count for list views so we don't need the
+    // full comment array up front. Defaults to 0 if the backend doesn't send it.
+    commentCount: raw.commentCount ?? 0,
   };
 }
 

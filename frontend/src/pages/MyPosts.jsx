@@ -92,7 +92,7 @@ export default function MyPosts() {
 
               <div className="flex gap-4 text-xs text-ink/50 mt-3 pt-3 border-t border-soil/10">
                 <span>{post.likes} Likes</span>
-                <span>{post.comments.length} Comments</span>
+                <span>{post.commentCount} Comments</span>
                 <span>{post.shares} Shares</span>
               </div>
             </div>
