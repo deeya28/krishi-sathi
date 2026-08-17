@@ -7,8 +7,13 @@ const { createNotification } = require("./notificationController");
 // These are eSewa's PUBLIC test credentials for the sandbox environment.
 // In production, move these to your .env file and use your real merchant credentials.
 const ESEWA_MERCHANT_CODE = process.env.ESEWA_MERCHANT_CODE || "EPAYTEST";
-const ESEWA_SECRET_KEY = process.env.ESEWA_SECRET_KEY || "8gBm/:&EnhH.1/q";
-const ESEWA_FORM_URL = "https://rc-epay.esewa.com.np/api/epay/main/v2/form";
+
+const ESEWA_SECRET_KEY =
+  process.env.ESEWA_SECRET_KEY || "8gBm/:&EnhH.1/q(";
+
+const ESEWA_STATUS_URL =
+  "https://rc.esewa.com.np/api/epay/transaction/status/";
+  
 const ESEWA_STATUS_URL = "https://rc.esewa.com.np/api/epay/transaction/status";
 
 // Base URLs eSewa redirects back to after payment - point these at your backend
