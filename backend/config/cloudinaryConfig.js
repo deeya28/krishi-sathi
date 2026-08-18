@@ -8,6 +8,8 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+// Multer storage that streams uploaded files directly to Cloudinary
+// instead of saving them to your server's disk first.
 const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => {
@@ -22,6 +24,7 @@ const storage = new CloudinaryStorage({
   },
 });
 
+// Limit file size to 20MB per file, allow up to 5 files per post
 const upload = multer({
   storage,
   limits: { fileSize: 20 * 1024 * 1024 },

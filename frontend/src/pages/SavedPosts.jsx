@@ -4,7 +4,7 @@ import { HeartIcon } from "../components/Icons";
 import PostMediaGrid from "../components/dashboard/PostMediaGrid";
 
 export default function SavedPosts() {
-  const { savedPosts, toggleSave } = useData();
+  const { savedPosts, toggleSave, commentsByPost } = useData();
 
   return (
     <DashboardLayout>
@@ -28,36 +28,41 @@ export default function SavedPosts() {
         </div>
       ) : (
         <div className="space-y-4">
-          {savedPosts.map((post) => (
-            <div key={post.id} className="bg-white/60 border border-soil/10 rounded-md p-5">
-              <div className="flex items-start justify-between mb-2 gap-3">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-9 h-9 rounded-full bg-paddy-green text-paper flex items-center justify-center text-sm font-bold shrink-0">
-                    {post.name.charAt(0)}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink truncate">{post.name}</p>
-                    <p className="text-xs text-ink/60">{post.role}</p>
+          {savedPosts.map((post) => {
+            const postComments = commentsByPost[post.id] || [];
+            return (
+              <div key={post.id} className="bg-white/60 border border-soil/10 rounded-md p-5">
+                <div className="flex items-start justify-between mb-2 gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-9 h-9 rounded-full bg-paddy-green text-paper flex items-center justify-center text-sm font-bold shrink-0">
+                      {post.name.charAt(0)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-ink truncate">{post.name}</p>
+                      {post.location && (
+                        <p className="text-xs text-ink/60">{post.location}</p>
+                      )}
+                    </div>
                   </div>
+                  <button
+                    onClick={() => toggleSave(post.id)}
+                    className="text-paddy-green shrink-0"
+                    aria-label="Unsave post"
+                    title="Unsave post"
+                  >
+                    <HeartIcon className="w-4 h-4" fill="currentColor" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => toggleSave(post.id)}
-                  className="text-paddy-green shrink-0"
-                  aria-label="Unsave post"
-                  title="Unsave post"
-                >
-                  <HeartIcon className="w-4 h-4" fill="currentColor" />
-                </button>
+                <p className="text-sm text-ink/85 leading-relaxed">{post.text}</p>
+                <PostMediaGrid media={post.media} />
+                <div className="flex gap-4 text-xs text-ink/50 mt-3 pt-3 border-t border-soil/10">
+                  <span>{post.likes} Likes</span>
+                  <span>{postComments.length} Comments</span>
+                  <span>{post.shares} Shares</span>
+                </div>
               </div>
-              <p className="text-sm text-ink/85 leading-relaxed">{post.text}</p>
-              <PostMediaGrid media={post.media} />
-              <div className="flex gap-4 text-xs text-ink/50 mt-3 pt-3 border-t border-soil/10">
-                <span>{post.likes} Likes</span>
-                <span>{post.comments.length} Comments</span>
-                <span>{post.shares} Shares</span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </DashboardLayout>
