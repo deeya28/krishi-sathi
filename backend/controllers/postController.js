@@ -36,24 +36,6 @@ exports.createPost = async (req, res) => {
       }
     }
 
-    // req.files comes from the "upload.array()" multer middleware on the route.
-    // Each uploaded file is already on Cloudinary by this point - multer-storage-cloudinary
-    // uploads it during the multer step and gives us back the resulting URL.
-    const media = (req.files || []).map((file) => ({
-      url: file.path, // Cloudinary's secure URL for the uploaded file
-      type: file.mimetype.startsWith("video") ? "video" : "image",
-    }));
-
-    // location may arrive as a JSON string if sent via multipart/form-data
-    let parsedLocation = location;
-    if (typeof location === "string") {
-      try {
-        parsedLocation = JSON.parse(location);
-      } catch {
-        parsedLocation = undefined;
-      }
-    }
-
     const post = await Post.create({
       farmer: req.user._id, // schema field name is "farmer" but stores the post's author regardless of role
       cropName: cropName || "",
