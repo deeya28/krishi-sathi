@@ -62,6 +62,10 @@ function normalizePost(raw) {
     // Not yet loaded on the feed list endpoint - filled in lazily by fetchFollowInfo/shares
     isFollowing: false,
     shares: raw.shareCount ?? 0,
+    // Comments are lazy-loaded per post into commentsByPost via fetchComments;
+    // this is just a lightweight count for list views so we don't need the
+    // full comment array up front. Defaults to 0 if the backend doesn't send it.
+    commentCount: raw.commentCount ?? 0,
   };
 }
 
@@ -137,18 +141,38 @@ export function DataProvider({ children }) {
   }, [notifications]);
 
   // --- CREATE POST ---
-  // Text-only for now. Nothing is required except text or media - the
-  // backend accepts a bare description with no cropName/issueType.
-  const addPost = async (text) => {
-    if (!text.trim()) return { ok: false, error: "Add some text to post." };
+  // Accepts an optional array of real File objects (photos/videos). When
+  // files are present, sends multipart/form-data (required for the backend's
+  // multer/Cloudinary upload). Otherwise sends plain JSON as before.
+  const addPost = async (text, files = []) => {
+    if (!text.trim() && files.length === 0) {
+      return { ok: false, error: "Add some text or a photo/video to post." };
+    }
     try {
-      const res = await fetch(`${API_URL}/posts`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({
-          description: text.trim(),
-        }),
-      });
+      let res;
+
+      if (files.length > 0) {
+        const formData = new FormData();
+        formData.append("description", text.trim());
+        files.forEach((file) => formData.append("media", file));
+
+        res = await fetch(`${API_URL}/posts`, {
+          method: "POST",
+          // No Content-Type here - the browser sets the correct multipart
+          // boundary automatically. Only pass the auth header.
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
+        });
+      } else {
+        res = await fetch(`${API_URL}/posts`, {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({
+            description: text.trim(),
+          }),
+        });
+      }
+
       const data = await res.json();
       if (!res.ok) return { ok: false, error: data.message || "Failed to create post." };
       await Promise.all([fetchPosts(), fetchMyPosts()]);

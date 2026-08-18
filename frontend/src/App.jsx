@@ -15,6 +15,8 @@ import Notifications from "./pages/Notifications";
 import Settings from "./pages/Settings";
 import AppointmentSuccess from "./pages/AppointmentSuccess";
 import AppointmentFailed from "./pages/AppointmentFailed";
+import Appointments from "./pages/Appointments";
+import ExpertAppointments from "./pages/ExpertAppointments";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -34,6 +36,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/dashboard/profile"
         element={
@@ -42,9 +45,8 @@ function App() {
           </ProtectedRoute>
         }
       />
-      {/* Public-facing profile for viewing OTHER users - separate from the
-          editable "My Profile" page above. Linked from author names/avatars
-          in the feed via /profile/:id */}
+
+      {/* Public-facing profile for viewing OTHER users */}
       <Route
         path="/profile/:id"
         element={
@@ -53,6 +55,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/dashboard/posts"
         element={
@@ -61,6 +64,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/dashboard/saved"
         element={
@@ -69,6 +73,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/dashboard/notifications"
         element={
@@ -77,6 +82,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/dashboard/settings"
         element={
@@ -85,6 +91,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/marketplace"
         element={
@@ -93,6 +100,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/expert"
         element={
@@ -101,6 +109,27 @@ function App() {
           </ProtectedRoute>
         }
       />
+
+      {/* Farmer's appointments */}
+      <Route
+        path="/appointments"
+        element={
+          <ProtectedRoute>
+            <Appointments />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Expert's appointments */}
+      <Route
+        path="/expert-appointments"
+        element={
+          <ProtectedRoute>
+            <ExpertAppointments />
+          </ProtectedRoute>
+        }
+      />
+
       <Route
         path="/appointment-success"
         element={
@@ -109,6 +138,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+
       <Route
         path="/appointment-failed"
         element={

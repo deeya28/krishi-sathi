@@ -29,9 +29,13 @@ export default function Dashboard() {
   } = useData();
 
   const [postText, setPostText] = useState("");
+  // Each entry: { file: File|null, url: previewUrl, type: "image"|"video", name }
+  // file is null for YouTube link entries (those aren't uploadable File objects)
   const [attachedMedia, setAttachedMedia] = useState([]);
   const [showYouTubeInput, setShowYouTubeInput] = useState(false);
   const [youtubeInput, setYoutubeInput] = useState("");
+  const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState("");
 
   const photoInputRef = useRef(null);
   const videoInputRef = useRef(null);
@@ -67,46 +71,55 @@ export default function Dashboard() {
     window.history.replaceState({}, document.title);
   }, [location.state, posts]);
 
-  // --- PHOTO FILE SELECT (Cloudinary / File) ---
-  // NOTE: media upload is not yet wired to the real backend - this stays a
-  // local preview only for now. addPost() below sends text only.
+  // Revoke object URLs when they're no longer needed, to avoid memory leaks
+  useEffect(() => {
+    return () => {
+      attachedMedia.forEach((m) => {
+        if (m.file) URL.revokeObjectURL(m.url);
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- PHOTO FILE SELECT ---
+  // Keeps the real File object (needed for upload) alongside a fast local
+  // preview URL (URL.createObjectURL - no need to read the whole file into
+  // memory as base64 just to show a thumbnail).
   const handlePhotoSelect = (e) => {
     const files = Array.from(e.target.files || []);
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setAttachedMedia((prev) => [
-          ...prev,
-          { url: event.target.result, type: "image", name: file.name },
-        ]);
-      };
-      reader.readAsDataURL(file);
-    });
+    const newEntries = files.map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+      type: "image",
+      name: file.name,
+    }));
+    setAttachedMedia((prev) => [...prev, ...newEntries]);
     e.target.value = "";
   };
 
-  // --- VIDEO FILE SELECT (FileReader readAsDataURL for persistent playback) ---
+  // --- VIDEO FILE SELECT ---
   const handleVideoSelect = (e) => {
     const files = Array.from(e.target.files || []);
-    files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setAttachedMedia((prev) => [
-          ...prev,
-          { url: event.target.result, type: "video", name: file.name },
-        ]);
-      };
-      reader.readAsDataURL(file);
-    });
+    const newEntries = files.map((file) => ({
+      file,
+      url: URL.createObjectURL(file),
+      type: "video",
+      name: file.name,
+    }));
+    setAttachedMedia((prev) => [...prev, ...newEntries]);
     e.target.value = "";
   };
 
   // --- YOUTUBE LINK ADD ---
+  // NOTE: YouTube links aren't real uploadable files, so they aren't sent to
+  // the backend's file upload - they're excluded when building the post.
+  // (If you want YouTube links saved with the post, that needs a small
+  // backend change to accept a separate "videoLinks" field.)
   const handleAddYouTubeLink = () => {
     if (!youtubeInput.trim()) return;
     setAttachedMedia((prev) => [
       ...prev,
-      { url: youtubeInput.trim(), type: "video" },
+      { file: null, url: youtubeInput.trim(), type: "video" },
     ]);
     setYoutubeInput("");
     setShowYouTubeInput(false);
@@ -114,17 +127,42 @@ export default function Dashboard() {
 
   // --- REMOVE ATTACHED MEDIA ---
   const handleRemoveMedia = (index) => {
-    setAttachedMedia((prev) => prev.filter((_, i) => i !== index));
+    setAttachedMedia((prev) => {
+      const target = prev[index];
+      if (target?.file) URL.revokeObjectURL(target.url);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   // --- CREATE POST ---
-  const handleCreatePost = (e) => {
+  const handleCreatePost = async (e) => {
     e.preventDefault();
-    if (!postText.trim()) return;
-    addPost(postText);
+    if (!postText.trim() && attachedMedia.length === 0) return;
+
+    setPosting(true);
+    setPostError("");
+
+    // Only real File objects get uploaded - YouTube link entries are skipped
+    // (see note above).
+    const filesToUpload = attachedMedia.filter((m) => m.file).map((m) => m.file);
+
+    const result = await addPost(postText, filesToUpload);
+
+    if (!result.ok) {
+      setPostError(result.error || "Failed to create post.");
+      setPosting(false);
+      return;
+    }
+
+    // Clean up preview object URLs now that the post succeeded
+    attachedMedia.forEach((m) => {
+      if (m.file) URL.revokeObjectURL(m.url);
+    });
+
     setPostText("");
     setAttachedMedia([]);
     setShowYouTubeInput(false);
+    setPosting(false);
   };
 
   // --- DELETE POST ---
@@ -217,6 +255,10 @@ export default function Dashboard() {
             style={{ fontFamily: "'Work Sans', sans-serif" }}
           />
 
+          {postError && (
+            <p className="text-xs text-red-600 mt-2">{postError}</p>
+          )}
+
           {/* ATTACHED MEDIA PREVIEW ROW */}
           {attachedMedia.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2 pt-2 border-t border-soil/10">
@@ -268,9 +310,6 @@ export default function Dashboard() {
                   </div>
                 );
               })}
-              <p className="w-full text-[10px] text-ink/40 mt-1">
-                Note: photo/video attachments aren't saved yet - text posts only for now.
-              </p>
             </div>
           )}
 
@@ -318,7 +357,7 @@ export default function Dashboard() {
                 type="button"
                 onClick={() => photoInputRef.current?.click()}
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-soil/15 hover:bg-soil/5 text-ink/80 transition-colors"
-                title="Add Photo (not yet saved to your post)"
+                title="Add Photo"
               >
                 <ImageIcon className="w-4 h-4 text-paddy-green" />
                 <span>Photo</span>
@@ -329,7 +368,7 @@ export default function Dashboard() {
                 type="button"
                 onClick={() => setShowYouTubeInput((prev) => !prev)}
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-soil/15 hover:bg-soil/5 text-ink/80 transition-colors"
-                title="Attach Video (not yet saved to your post)"
+                title="Attach a YouTube link (not uploaded, link only)"
               >
                 <span className="text-red-600 font-bold text-xs">▶</span>
                 <span>Video (YouTube)</span>
@@ -348,7 +387,7 @@ export default function Dashboard() {
                 type="button"
                 onClick={() => videoInputRef.current?.click()}
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-soil/15 hover:bg-soil/5 text-ink/80 transition-colors"
-                title="Upload Video file (not yet saved to your post)"
+                title="Upload Video file"
               >
                 <VideoIcon className="w-4 h-4 text-red-600" />
                 <span>Video File</span>
@@ -358,11 +397,11 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={handleCreatePost}
-              disabled={!postText.trim()}
+              disabled={(!postText.trim() && attachedMedia.length === 0) || posting}
               className="text-sm px-6 py-2 rounded-full bg-paddy-green text-paper font-medium hover:bg-soil-dark transition-colors disabled:opacity-50 cursor-pointer"
               style={{ fontFamily: "'Work Sans', sans-serif" }}
             >
-              {t("dashboard.post") || "Publish Post"}
+              {posting ? "Posting..." : t("dashboard.post") || "Publish Post"}
             </button>
           </div>
         </div>
