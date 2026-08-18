@@ -12,6 +12,9 @@ const TIME_SLOTS = [
   "06:00 PM",
 ];
 
+// Flat consultation fee (NPR) charged for booking an expert appointment
+const CONSULTATION_FEE = 500;
+
 export default function Expert() {
   const { t } = useTranslation();
 
@@ -58,6 +61,26 @@ export default function Expert() {
     setBookingSuccess("");
   };
 
+  // Submits a hidden auto-posting form to eSewa's payment page using the
+  // signed field data the backend returned. eSewa requires a real form POST
+  // (not fetch/XHR) since it redirects the user's browser to its own UI.
+  const redirectToEsewa = (esewaFormUrl, esewaPayment) => {
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = esewaFormUrl;
+
+    Object.entries(esewaPayment).forEach(([key, value]) => {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = key;
+      input.value = value;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+  };
+
   // Book appointment
   const handleConfirm = async (e) => {
     e.preventDefault();
@@ -101,19 +124,26 @@ export default function Expert() {
           reason: reason.trim(),
           appointmentDate,
           timeSlot: appointmentTime,
+          amount: CONSULTATION_FEE,
         }),
       });
 
       setBookingSuccess(
-        data.message || "Appointment booked successfully."
+        "Appointment created. Redirecting you to eSewa to complete payment..."
       );
 
-      // Clear form
+      // Redirect to eSewa's payment page - appointment is only confirmed
+      // once the backend's /verify callback receives a successful payment.
+      if (data.esewaFormUrl && data.esewaPayment) {
+        redirectToEsewa(data.esewaFormUrl, data.esewaPayment);
+        return; // page is navigating away, no need to reset form state
+      }
+
+      // Fallback: if for some reason payment data wasn't returned, just
+      // clear the form as before.
       setReason("");
       setAppointmentDate("");
       setAppointmentTime(TIME_SLOTS[0]);
-
-      // Keep selected expert
       setSelectedExpert(selectedExpert);
     } catch (err) {
       setBookingError(
@@ -386,16 +416,15 @@ export default function Expert() {
                     </select>
                   </div>
 
-                  {/* Information */}
+                  {/* Fee + Information */}
                   <div className="bg-paddy-green/5 border border-paddy-green/20 rounded-lg p-3 mb-5">
                     <p className="text-sm font-semibold text-ink">
-                      Appointment Request
+                      Consultation Fee: NPR {CONSULTATION_FEE}
                     </p>
 
                     <p className="text-xs text-ink/60 mt-1">
-                      Your appointment will be sent to the expert as
-                      a pending request. The expert can review and
-                      manage the appointment.
+                      You'll be redirected to eSewa to complete payment.
+                      The appointment is confirmed once payment succeeds.
                     </p>
                   </div>
 

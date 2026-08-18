@@ -4,6 +4,8 @@ const router = express.Router();
 const {
   getExperts,
   createAppointment,
+  verifyPayment,
+  paymentFailed,
   getMyAppointments,
   getExpertAppointments,
   cancelAppointment,
@@ -42,6 +44,15 @@ router.post(
   authorize(...ANY_ROLE),
   createAppointment
 );
+
+// ==========================================
+// PAYMENT CALLBACKS (eSewa redirects here - no auth token available)
+// ==========================================
+// @route   GET /api/appointments/verify
+router.get("/verify", verifyPayment);
+
+// @route   GET /api/appointments/payment-failed
+router.get("/payment-failed", paymentFailed);
 
 // ==========================================
 // FARMER APPOINTMENTS
