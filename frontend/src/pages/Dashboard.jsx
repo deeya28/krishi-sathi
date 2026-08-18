@@ -22,6 +22,7 @@ export default function Dashboard() {
     toggleLike,
     sharePost,
     addComment,
+    loadComments,
     toggleSave,
     savedIds,
     commentsByPost,
@@ -39,6 +40,10 @@ export default function Dashboard() {
 
   const photoInputRef = useRef(null);
   const videoInputRef = useRef(null);
+
+  // File upload states
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
 
   // Edit Post States
   const [editingPostId, setEditingPostId] = useState(null);

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { useAuth } from "./AuthContext";
+import { apiFetch } from "../utils/api";
 
 const DataContext = createContext(null);
 
@@ -225,51 +226,99 @@ export function DataProvider({ children }) {
       )
     );
     try {
-      const res = await fetch(`${API_URL}/likes/${id}`, {
-        method: "POST",
-        headers: authHeaders(),
-      });
-      if (!res.ok) fetchPosts(); // revert to real state on failure
+      const data = await apiFetch(`/likes/${id}`, { method: 'POST' });
+      // Sync actual count from server
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === id ? { ...p, likes: data.likeCount, isLiked: data.liked } : p
+        )
+      );
     } catch (err) {
-      fetchPosts();
+      // Revert optimistic update on error
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === id
+            ? { ...p, isLiked: !p.isLiked, likes: p.isLiked ? p.likes - 1 : p.likes + 1 }
+            : p
+        )
+      );
+      console.error('Failed to toggle like:', err.message);
     }
   };
 
-  // --- COMMENTS (lazy-loaded per post) ---
-  const fetchComments = async (postId) => {
+  // ------------------------------------------------------------------
+  // Load comments for a specific post  (called when drawer opens)
+  // ------------------------------------------------------------------
+  const loadComments = async (postId) => {
     try {
-      const res = await fetch(`${API_URL}/comments/${postId}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (res.ok) {
-        const list = (data.comments || data || []).map(normalizeComment);
-        setCommentsByPost((prev) => ({ ...prev, [postId]: list }));
-      }
+      const data = await apiFetch(`/comments/${postId}`);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId
+            ? { ...p, comments: (data.comments || []).map(mapComment) }
+            : p
+        )
+      );
     } catch (err) {
-      console.error("Failed to load comments", err);
+      console.error('Failed to load comments:', err.message);
     }
   };
 
+  // ------------------------------------------------------------------
+  // Add comment
+  // ------------------------------------------------------------------
   const addComment = async (postId, text) => {
-    if (!text || !text.trim()) return;
+    if (!text?.trim()) return;
     try {
-      const res = await fetch(`${API_URL}/comments/${postId}`, {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({
-          text: text.trim(),
-          commentType: commentTypeForRole(currentUser?.role),
-        }),
+      const data = await apiFetch(`/comments/${postId}`, {
+        method: 'POST',
+        body: JSON.stringify({ text: text.trim() }),
       });
-      if (res.ok) await fetchComments(postId);
+      const newComment = mapComment(data.comment);
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, comments: [...p.comments, newComment] } : p
+        )
+      );
     } catch (err) {
-      console.error("Failed to add comment", err);
+      console.error('Failed to add comment:', err.message);
     }
   };
 
-  // --- SAVE / BOOKMARK (local only - no backend endpoint for this yet) ---
+  // ------------------------------------------------------------------
+  // Follow toggle  (local-only — no backend endpoint yet)
+  // ------------------------------------------------------------------
+  const toggleFollow = (id) =>
+    setPosts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, isFollowing: !p.isFollowing } : p))
+    );
+
+  // ------------------------------------------------------------------
+  // Share  (local-only)
+  // ------------------------------------------------------------------
+  const sharePost = (id) =>
+    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, shares: p.shares + 1 } : p)));
+
+  // ------------------------------------------------------------------
+  // Saved posts  (localStorage-only — no backend equivalent)
+  // ------------------------------------------------------------------
   const toggleSave = (id) =>
     setSavedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
+  // ------------------------------------------------------------------
+  // Notifications  (localStorage-only)
+  // ------------------------------------------------------------------
+  const markNotificationRead    = (id) =>
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  const markAllNotificationsRead = () =>
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const clearNotifications       = () => setNotifications([]);
+
+  // ------------------------------------------------------------------
+  // Derived data
+  // ------------------------------------------------------------------
+  const myPosts    = posts.filter((p) => currentUser && p.authorId === currentUser.id);
+=======
   // --- FOLLOW (real backend, POST /api/follows/:userId toggles) ---
   // Follow is keyed by the *author's user ID*, not the post ID - one follow
   // status applies across all of that author's posts, so we update every
@@ -341,6 +390,7 @@ export function DataProvider({ children }) {
         commentsByPost,
         notifications,
         unreadCount,
+        loading,
         fetchPosts,
         addPost,
         deletePost,
@@ -351,6 +401,7 @@ export function DataProvider({ children }) {
         sharePost,
         fetchComments,
         addComment,
+        loadComments,
         toggleSave,
         markNotificationRead,
         markAllNotificationsRead,
