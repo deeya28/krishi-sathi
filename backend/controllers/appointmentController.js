@@ -42,9 +42,9 @@ function generateSignature(totalAmount, transactionUuid, productCode) {
 // CREATE APPOINTMENT
 // ==========================================
 
-// @desc    Farmer books an appointment with an expert
+// @desc    Any logged-in user books an appointment with an expert
 // @route   POST /api/appointments
-// @access  Private (farmer)
+// @access  Private (farmer, agricultural_expert, community_user, admin)
 exports.createAppointment = async (req, res) => {
   try {
     const {
@@ -66,6 +66,13 @@ exports.createAppointment = async (req, res) => {
       return res.status(400).json({
         message:
           "expertId, reason, appointmentDate, timeSlot, and amount are required",
+      });
+    }
+
+    // Prevent an expert from booking an appointment with themselves
+    if (expertId === req.user._id.toString()) {
+      return res.status(400).json({
+        message: "You cannot book an appointment with yourself",
       });
     }
 
@@ -274,13 +281,14 @@ exports.paymentFailed = async (req, res) => {
 // GET ALL EXPERTS
 // ==========================================
 
-// @desc    Get list of all experts
+// @desc    Get list of all experts, excluding yourself if you are an expert
 // @route   GET /api/appointments/experts
-// @access  Private (farmer)
+// @access  Private (any logged-in role)
 exports.getExperts = async (req, res) => {
   try {
     const experts = await User.find({
       role: "agricultural_expert",
+      _id: { $ne: req.user._id }, // never show yourself, even if you're an expert
     }).select("name email");
 
     res.status(200).json({
@@ -296,12 +304,12 @@ exports.getExperts = async (req, res) => {
 };
 
 // ==========================================
-// GET FARMER'S APPOINTMENTS
+// GET MY APPOINTMENTS (as the person who booked)
 // ==========================================
 
-// @desc    Get logged-in farmer's appointments
+// @desc    Get logged-in user's appointments (as the booker)
 // @route   GET /api/appointments/my-appointments
-// @access  Private (farmer)
+// @access  Private (any logged-in role)
 exports.getMyAppointments = async (req, res) => {
   try {
     const appointments = await Appointment.find({
