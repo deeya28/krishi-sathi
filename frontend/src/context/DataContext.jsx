@@ -4,55 +4,13 @@ import { apiFetch } from "../utils/api";
 
 const DataContext = createContext(null);
 
-const SAVED_KEY  = "ks_saved";
-const NOTIFS_KEY = "ks_notifications";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const SAVED_KEY = "ks_saved"; // bookmarks - local only, no backend endpoint for this yet
+const NOTIFS_KEY = "ks_notifications"; // local only until notification wiring is confirmed
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Map a backend post document to the shape the UI expects. */
-function mapPost(raw) {
-  const loc = raw.location || {};
-  const locationStr = [loc.district, loc.state].filter(Boolean).join(', ') || 'Nepal';
-
-  return {
-    // Identity
-    id:       raw._id,
-    authorId: raw.farmer?._id || null,
-    // Author display
-    name:     raw.farmer?.name  || 'Unknown',
-    role:     raw.farmer?.email || '',          // email shown as subtitle (no role in populate)
-    location: locationStr,
-    farmSize: '—',
-    badge:    null,
-    primaryCrops: [raw.cropName].filter(Boolean),
-    // Post content
-    text:       raw.description,
-    cropName:   raw.cropName,
-    issueType:  raw.issueType,
-    status:     raw.status,
-    media:      raw.media || [],
-    // Engagement
-    time:     raw.createdAt ? new Date(raw.createdAt).toLocaleDateString() : 'Now',
-    likes:    raw.likeCount  || 0,
-    isLiked:  raw.likedByMe  || false,
-    shares:   0,
-    isFollowing: false,
-    comments: [],           // loaded lazily when comment drawer opens
-  };
-}
-
-/** Map a backend comment document to the shape the UI expects. */
-function mapComment(raw) {
-  return {
-    id:           raw._id,
-    name:         raw.user?.name  || 'Unknown',
-    text:         raw.text,
-    time:         raw.createdAt ? new Date(raw.createdAt).toLocaleDateString() : 'Now',
-    commentType:  raw.commentType,
-  };
-}
+const SEED_NOTIFICATIONS = [
+  { id: 1, type: "system", text: "Welcome to Krishi Sathi! Complete your profile to get started.", time: "3d", read: true },
+];
 
 function loadJSON(key, fallback) {
   try {
@@ -63,123 +21,203 @@ function loadJSON(key, fallback) {
   }
 }
 
-const SEED_NOTIFICATIONS = [
-  { id: 1, type: "system", text: "Welcome to Krishi Sathi! Complete your profile to get started.", time: "Now", read: false },
-];
+// Turns an ISO date string into a short relative label
+function timeAgo(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
 
-// ---------------------------------------------------------------------------
-// Provider
-// ---------------------------------------------------------------------------
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return date.toLocaleDateString();
+}
+
+// Maps a User.role value to the commentType enum the backend expects
+function commentTypeForRole(role) {
+  if (role === "agricultural_expert") return "expert";
+  if (role === "farmer") return "farmer";
+  return "community";
+}
+
+// Normalizes a raw post from the API into the shape the UI uses
+function normalizePost(raw) {
+  return {
+    id: raw._id,
+    authorId: raw.farmer?._id || raw.farmer,
+    name: raw.farmer?.name || "Unknown user",
+    cropName: raw.cropName,
+    text: raw.description,
+    issueType: raw.issueType,
+    media: raw.media || [],
+    location: raw.location?.district || raw.location?.state || "",
+    createdAt: raw.createdAt,
+    time: timeAgo(raw.createdAt),
+    likes: raw.likeCount ?? 0,
+    isLiked: !!raw.likedByMe,
+    status: raw.status,
+    // Not yet loaded on the feed list endpoint - filled in lazily by fetchFollowInfo/shares
+    isFollowing: false,
+    shares: raw.shareCount ?? 0,
+    // Comments are lazy-loaded per post into commentsByPost via fetchComments;
+    // this is just a lightweight count for list views so we don't need the
+    // full comment array up front. Defaults to 0 if the backend doesn't send it.
+    commentCount: raw.commentCount ?? 0,
+  };
+}
+
+function normalizeComment(c) {
+  return {
+    id: c._id,
+    name: c.user?.name || "Unknown",
+    text: c.text,
+    time: timeAgo(c.createdAt),
+  };
+}
 
 export function DataProvider({ children }) {
-  const { currentUser } = useAuth();
+  const { currentUser, token } = useAuth();
+  const [posts, setPosts] = useState([]);
+  const [myPosts, setMyPosts] = useState([]);
+  const [savedIds, setSavedIds] = useState(() => loadJSON(SAVED_KEY, []));
+  const [commentsByPost, setCommentsByPost] = useState({});
+  const [notifications, setNotifications] = useState(() =>
+    loadJSON(NOTIFS_KEY, SEED_NOTIFICATIONS)
+  );
+  const [loading, setLoading] = useState(false);
 
-  const [posts,         setPosts]         = useState([]);
-  const [loading,       setLoading]       = useState(false);
-  const [savedIds,      setSavedIds]      = useState(() => loadJSON(SAVED_KEY, []));
-  const [notifications, setNotifications] = useState(() => loadJSON(NOTIFS_KEY, SEED_NOTIFICATIONS));
+  const authHeaders = useCallback(
+    () => ({
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }),
+    [token]
+  );
 
-  // Persist saved / notifications to localStorage
-  useEffect(() => { localStorage.setItem(SAVED_KEY,  JSON.stringify(savedIds)); },      [savedIds]);
-  useEffect(() => { localStorage.setItem(NOTIFS_KEY, JSON.stringify(notifications)); }, [notifications]);
-
-  // ------------------------------------------------------------------
-  // Fetch the post feed from the backend whenever the user changes
-  // ------------------------------------------------------------------
   const fetchPosts = useCallback(async () => {
-    if (!currentUser) { setPosts([]); return; }
+    if (!token) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      const data = await apiFetch('/posts');
-      setPosts((data.posts || []).map(mapPost));
+      const res = await fetch(`${API_URL}/posts`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) setPosts((data.posts || []).map(normalizePost));
     } catch (err) {
-      console.error('Failed to load posts:', err.message);
+      console.error("Failed to load posts", err);
     } finally {
       setLoading(false);
     }
-  }, [currentUser]);
+  }, [token, authHeaders]);
 
-  useEffect(() => { fetchPosts(); }, [fetchPosts]);
-
-  // ------------------------------------------------------------------
-  // Create post  (farmer only — backend enforces this)
-  // Accepts an optional array of File objects (photos/videos) and extra
-  // fields (cropName, issueType, location). Existing calls like
-  // addPost(postText) still work fine since files/extra default to [] / {}.
-  // ------------------------------------------------------------------
-  const addPost = async (text, files = [], extra = {}) => {
-    if (!text?.trim()) return;
+  const fetchMyPosts = useCallback(async () => {
+    if (!token) return;
     try {
-      let data;
+      const res = await fetch(`${API_URL}/posts/my-posts`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) setMyPosts((data.posts || []).map(normalizePost));
+    } catch (err) {
+      console.error("Failed to load your posts", err);
+    }
+  }, [token, authHeaders]);
+
+  useEffect(() => {
+    if (token) {
+      fetchPosts();
+      fetchMyPosts();
+    } else {
+      setPosts([]);
+      setMyPosts([]);
+    }
+  }, [token, fetchPosts, fetchMyPosts]);
+
+  useEffect(() => {
+    localStorage.setItem(SAVED_KEY, JSON.stringify(savedIds));
+  }, [savedIds]);
+
+  useEffect(() => {
+    localStorage.setItem(NOTIFS_KEY, JSON.stringify(notifications));
+  }, [notifications]);
+
+  // --- CREATE POST ---
+  // Accepts an optional array of real File objects (photos/videos). When
+  // files are present, sends multipart/form-data (required for the backend's
+  // multer/Cloudinary upload). Otherwise sends plain JSON as before.
+  const addPost = async (text, files = []) => {
+    if (!text.trim() && files.length === 0) {
+      return { ok: false, error: "Add some text or a photo/video to post." };
+    }
+    try {
+      let res;
 
       if (files.length > 0) {
-        // Files present - must send as multipart/form-data
         const formData = new FormData();
-        formData.append('cropName', extra.cropName || 'General');
-        formData.append('description', text.trim());
-        formData.append('issueType', extra.issueType || 'other');
-        if (extra.location) {
-          formData.append('location', JSON.stringify(extra.location));
-        }
-        files.forEach((file) => formData.append('media', file));
+        formData.append("description", text.trim());
+        files.forEach((file) => formData.append("media", file));
 
-        data = await apiFetch('/posts', {
-          method: 'POST',
-          body: formData, // apiFetch detects FormData and skips the JSON header
+        res = await fetch(`${API_URL}/posts`, {
+          method: "POST",
+          // No Content-Type here - the browser sets the correct multipart
+          // boundary automatically. Only pass the auth header.
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData,
         });
       } else {
-        // No files - plain JSON, same as before
-        data = await apiFetch('/posts', {
-          method: 'POST',
+        res = await fetch(`${API_URL}/posts`, {
+          method: "POST",
+          headers: authHeaders(),
           body: JSON.stringify({
-            cropName: extra.cropName || 'General',
             description: text.trim(),
-            issueType: extra.issueType || 'other',
           }),
         });
       }
 
-      // Prepend the new post to the feed
-      setPosts((prev) => [mapPost({ ...data.post, likeCount: 0, likedByMe: false }), ...prev]);
+      const data = await res.json();
+      if (!res.ok) return { ok: false, error: data.message || "Failed to create post." };
+      await Promise.all([fetchPosts(), fetchMyPosts()]);
+      return { ok: true };
     } catch (err) {
-      console.error('Failed to create post:', err.message);
+      return { ok: false, error: "Could not connect to the server." };
     }
   };
 
-  // ------------------------------------------------------------------
-  // Delete post  (owner only)
-  // ------------------------------------------------------------------
   const deletePost = async (id) => {
     try {
-      await apiFetch(`/posts/${id}`, { method: 'DELETE' });
-      setPosts((prev) => prev.filter((p) => p.id !== id));
+      const res = await fetch(`${API_URL}/posts/${id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+      if (res.ok) {
+        setPosts((prev) => prev.filter((p) => p.id !== id));
+        setMyPosts((prev) => prev.filter((p) => p.id !== id));
+      }
     } catch (err) {
-      console.error('Failed to delete post:', err.message);
+      console.error("Failed to delete post", err);
     }
   };
 
-  // ------------------------------------------------------------------
-  // Edit post  (owner only)
-  // ------------------------------------------------------------------
   const editPost = async (id, text) => {
     try {
-      const data = await apiFetch(`/posts/${id}`, {
-        method: 'PUT',
+      const res = await fetch(`${API_URL}/posts/${id}`, {
+        method: "PUT",
+        headers: authHeaders(),
         body: JSON.stringify({ description: text }),
       });
-      setPosts((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, text: data.post.description } : p))
-      );
+      const data = await res.json();
+      if (res.ok) {
+        const updated = normalizePost(data.post);
+        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updated } : p)));
+        setMyPosts((prev) => prev.map((p) => (p.id === id ? { ...p, ...updated } : p)));
+      }
     } catch (err) {
-      console.error('Failed to edit post:', err.message);
+      console.error("Failed to edit post", err);
     }
   };
 
-  // ------------------------------------------------------------------
-  // Toggle like
-  // ------------------------------------------------------------------
+  // --- LIKES ---
   const toggleLike = async (id) => {
-    // Optimistic update
     setPosts((prev) =>
       prev.map((p) =>
         p.id === id
@@ -265,9 +303,7 @@ export function DataProvider({ children }) {
   // Saved posts  (localStorage-only — no backend equivalent)
   // ------------------------------------------------------------------
   const toggleSave = (id) =>
-    setSavedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setSavedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   // ------------------------------------------------------------------
   // Notifications  (localStorage-only)
@@ -282,6 +318,64 @@ export function DataProvider({ children }) {
   // Derived data
   // ------------------------------------------------------------------
   const myPosts    = posts.filter((p) => currentUser && p.authorId === currentUser.id);
+=======
+  // --- FOLLOW (real backend, POST /api/follows/:userId toggles) ---
+  // Follow is keyed by the *author's user ID*, not the post ID - one follow
+  // status applies across all of that author's posts, so we update every
+  // post by that author in the feed at once.
+  const toggleFollow = async (authorId) => {
+    if (!authorId) return;
+    setPosts((prev) =>
+      prev.map((p) => (p.authorId === authorId ? { ...p, isFollowing: !p.isFollowing } : p))
+    );
+    try {
+      const res = await fetch(`${API_URL}/follows/${authorId}`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      if (!res.ok) fetchPosts(); // revert on failure
+    } catch (err) {
+      fetchPosts();
+    }
+  };
+
+  // Fetch follow info (counts + isFollowing) for one profile - used on the
+  // profile page, not the feed (feed toggle above is optimistic/local).
+  const fetchFollowInfo = async (userId) => {
+    try {
+      const res = await fetch(`${API_URL}/follows/${userId}`, { headers: authHeaders() });
+      const data = await res.json();
+      if (res.ok) return data; // { followerCount, followingCount, isFollowing }
+    } catch (err) {
+      console.error("Failed to load follow info", err);
+    }
+    return null;
+  };
+
+  // --- SHARE (real backend, POST /api/shares/:postId records a share) ---
+  const sharePost = async (id) => {
+    setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, shares: p.shares + 1 } : p)));
+    try {
+      const res = await fetch(`${API_URL}/shares/${id}`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, shares: data.shareCount } : p)));
+      }
+    } catch (err) {
+      console.error("Failed to record share", err);
+    }
+  };
+
+  // --- NOTIFICATIONS (local only until backend wiring is confirmed) ---
+  const markNotificationRead = (id) =>
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  const markAllNotificationsRead = () =>
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const clearNotifications = () => setNotifications([]);
+
   const savedPosts = posts.filter((p) => savedIds.includes(p.id));
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -292,6 +386,8 @@ export function DataProvider({ children }) {
         myPosts,
         savedPosts,
         savedIds,
+        loading,
+        commentsByPost,
         notifications,
         unreadCount,
         loading,
@@ -300,8 +396,10 @@ export function DataProvider({ children }) {
         deletePost,
         editPost,
         toggleFollow,
+        fetchFollowInfo,
         toggleLike,
         sharePost,
+        fetchComments,
         addComment,
         loadComments,
         toggleSave,

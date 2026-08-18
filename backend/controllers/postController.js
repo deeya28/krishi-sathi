@@ -1,15 +1,39 @@
 const Post = require("../models/postModel"); // adjust path to match your folder structure
 const Like = require("../models/likeModel");
+const { User, Roles } = require("../models/userModel");
+const { createNotification } = require("./notificationController");
 
-// @desc    Create a new post (farmer uploads crop photo/video with issue description)
+// @desc    Create a new post (any user - farmer, expert, or community - shares an
+// update, question, or crop issue with photos/videos)
 // @route   POST /api/posts
-// @access  Private (farmer)
+// @access  Private (farmer, agricultural_expert, community_user, admin)
 exports.createPost = async (req, res) => {
   try {
     const { cropName, description, issueType, location } = req.body;
 
-    if (!cropName || !description) {
-      return res.status(400).json({ message: "Crop name and description are required" });
+    // A post needs *something* - text, or at least one attached photo/video.
+    // cropName/issueType are optional extras, not requirements.
+    const hasMedia = req.files && req.files.length > 0;
+    if (!description?.trim() && !hasMedia) {
+      return res.status(400).json({ message: "Add some text or a photo/video to post." });
+    }
+
+    // req.files comes from the "upload.array()" multer middleware on the route.
+    // Each uploaded file is already on Cloudinary by this point - multer-storage-cloudinary
+    // uploads it during the multer step and gives us back the resulting URL.
+    const media = (req.files || []).map((file) => ({
+      url: file.path, // Cloudinary's secure URL for the uploaded file
+      type: file.mimetype.startsWith("video") ? "video" : "image",
+    }));
+
+    // location may arrive as a JSON string if sent via multipart/form-data
+    let parsedLocation = location;
+    if (typeof location === "string") {
+      try {
+        parsedLocation = JSON.parse(location);
+      } catch {
+        parsedLocation = undefined;
+      }
     }
 
     // req.files comes from the "upload.array()" multer middleware on the route.
@@ -31,13 +55,36 @@ exports.createPost = async (req, res) => {
     }
 
     const post = await Post.create({
-      farmer: req.user._id, // assumes auth middleware sets req.user
-      cropName,
-      description,
+      farmer: req.user._id, // schema field name is "farmer" but stores the post's author regardless of role
+      cropName: cropName || "",
+      description: description?.trim() || "",
       issueType,
       media,
       location: parsedLocation,
     });
+
+    // US-30: notify every expert when a farmer posts, so they can respond
+    // promptly. Runs after the post is saved and doesn't block the response
+    // if it fails - a farmer's post shouldn't fail just because notifying
+    // experts had a problem.
+    if (req.user.role === Roles.FARMER) {
+      User.find({ role: Roles.EXPERT })
+        .select("_id")
+        .then((experts) => {
+          experts.forEach((expert) => {
+            createNotification({
+              recipient: expert._id,
+              type: "help_request",
+              text: `${req.user.name} posted a new help request${
+                cropName ? ` about ${cropName}` : ""
+              }.`,
+              relatedPost: post._id,
+              fromUser: req.user._id,
+            });
+          });
+        })
+        .catch((err) => console.error("Failed to notify experts:", err.message));
+    }
 
     res.status(201).json({ message: "Post created successfully", post });
   } catch (error) {
@@ -119,9 +166,9 @@ exports.getPostById = async (req, res) => {
   }
 };
 
-// @desc    Get all posts created by the logged-in farmer
+// @desc    Get all posts created by the logged-in user
 // @route   GET /api/posts/my-posts
-// @access  Private (farmer)
+// @access  Private (farmer, agricultural_expert, community_user, admin)
 exports.getMyPosts = async (req, res) => {
   try {
     const posts = await Post.find({ farmer: req.user._id }).sort({ createdAt: -1 });
@@ -136,9 +183,9 @@ exports.getMyPosts = async (req, res) => {
 // live in their own collection - see commentController.js for
 // addComment / getCommentsByPost.
 
-// @desc    Update a post (only by the farmer who created it)
+// @desc    Update a post (only by the user who created it)
 // @route   PUT /api/posts/:id
-// @access  Private (farmer)
+// @access  Private
 exports.updatePost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
@@ -168,9 +215,9 @@ exports.updatePost = async (req, res) => {
   }
 };
 
-// @desc    Delete a post (only by the farmer who created it)
+// @desc    Delete a post (by the user who created it, or by an admin for moderation)
 // @route   DELETE /api/posts/:id
-// @access  Private (farmer)
+// @access  Private
 exports.deletePost = async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
@@ -179,7 +226,10 @@ exports.deletePost = async (req, res) => {
       return res.status(404).json({ message: "Post not found" });
     }
 
-    if (post.farmer.toString() !== req.user._id.toString()) {
+    const isOwner = post.farmer.toString() === req.user._id.toString();
+    const isAdmin = req.user.role === Roles.ADMIN;
+
+    if (!isOwner && !isAdmin) {
       return res.status(403).json({ message: "Not authorized to delete this post" });
     }
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import DashboardLayout from "../components/dashboard/DashboardLayout";
 import { useData } from "../context/DataContext";
 import { PostIcon } from "../components/Icons";
+import PostMediaGrid from "../components/dashboard/PostMediaGrid";
 
 export default function MyPosts() {
   const { myPosts, editPost, deletePost } = useData();
@@ -83,12 +84,15 @@ export default function MyPosts() {
                   </div>
                 </div>
               ) : (
-                <p className="text-sm text-ink/85 leading-relaxed">{post.text}</p>
+                <>
+                  <p className="text-sm text-ink/85 leading-relaxed">{post.text}</p>
+                  <PostMediaGrid media={post.media} />
+                </>
               )}
 
               <div className="flex gap-4 text-xs text-ink/50 mt-3 pt-3 border-t border-soil/10">
                 <span>{post.likes} Likes</span>
-                <span>{post.comments.length} Comments</span>
+                <span>{post.commentCount} Comments</span>
                 <span>{post.shares} Shares</span>
               </div>
             </div>

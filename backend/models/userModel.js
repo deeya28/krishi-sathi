@@ -29,6 +29,26 @@ const userSchema = new mongoose.Schema(
             enum: Object.values(Roles), // Restricts values to ['admin', 'farmer', 'agricultural_expert', 'community_user']
             default: Roles.COMMUNITY,   // Sets default role if none is provided
         },
+        isVerified: {
+            type: Boolean,
+            default: false,
+            // true once an admin has verified this expert's credentials
+            // (only meaningful for role === "agricultural_expert", but safe to have on everyone)
+        },
+        location: {
+            type: String,
+            default: '',
+        },
+        bio: {
+            type: String,
+            default: '',
+        },
+        resetPasswordToken: {
+       type: String,
+   },
+   resetPasswordExpire: {
+       type: Date,
+   },
     },    {
         timestamps: true, 
     }
